@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 namespace QuickGraph.Predicates
 {
+#if !SILVERLIGHT
     [Serializable]
-    public class FilteredVertexListGraph<TVertex, TEdge, Graph> :
-        FilteredIncidenceGraph<TVertex,TEdge,Graph>,
-        IVertexListGraph<TVertex,TEdge>
+#endif
+    public class FilteredVertexListGraph<TVertex, TEdge, Graph> 
+        : FilteredIncidenceGraph<TVertex,TEdge,Graph>
+        , IVertexListGraph<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
         where Graph : IVertexListGraph<TVertex,TEdge>
     {
@@ -21,7 +24,8 @@ namespace QuickGraph.Predicates
         {
             get 
             {
-                foreach (var v in this.Vertices)
+                foreach (var v in this.BaseGraph.Vertices)
+                    if (this.VertexPredicate(v))
                         return false;
                 return true;
             }
@@ -32,7 +36,8 @@ namespace QuickGraph.Predicates
             get 
             {
                 int count = 0;
-                foreach (var v in this.Vertices)
+                foreach (var v in this.BaseGraph.Vertices)
+                    if (this.VertexPredicate(v))
                         count++;
                 return count;
             }
@@ -46,13 +51,6 @@ namespace QuickGraph.Predicates
                     if (this.VertexPredicate(v))
                         yield return v;
             }
-        }
-
-        public bool ContainsVertex(TVertex vertex)
-        {
-            if (!this.VertexPredicate(vertex))
-                return false;
-            return this.ContainsVertex(vertex);
         }
     }
 }

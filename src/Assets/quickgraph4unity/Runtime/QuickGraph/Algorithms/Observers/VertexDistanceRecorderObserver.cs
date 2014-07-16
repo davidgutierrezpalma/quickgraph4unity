@@ -1,61 +1,76 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
+using QuickGraph.Algorithms.ShortestPath;
 
 namespace QuickGraph.Algorithms.Observers
 {
     /// <summary>
-    /// 
+    /// A distance recorder for directed tree builder algorithms
     /// </summary>
-    /// <typeparam name="Vertex"></typeparam>
-    /// <typeparam name="Edge"></typeparam>
-    /// <reference-ref
-    ///     idref="boost"
-    ///     />
+    /// <typeparam name="TVertex">type of a vertex</typeparam>
+    /// <typeparam name="TEdge">type of an edge</typeparam>
+#if !SILVERLIGHT
     [Serializable]
-    public sealed class VertexDistanceRecorderObserver<TVertex, TEdge> :
-        IObserver<IDistanceRecorderAlgorithm<TVertex, TEdge>>
+#endif
+    public sealed class VertexDistanceRecorderObserver<TVertex, TEdge>
+        : IObserver<ITreeBuilderAlgorithm<TVertex, TEdge>>
         where TEdge : IEdge<TVertex>
     {
-        private IDictionary<TVertex, int> distances;
+        private readonly IDistanceRelaxer distanceRelaxer;
+        private readonly Func<TEdge, double> edgeWeights;
+        private readonly IDictionary<TVertex, double> distances;
 
-        public VertexDistanceRecorderObserver()
-            :this(new Dictionary<TVertex,int>())
-        {}
+        public VertexDistanceRecorderObserver(Func<TEdge, double> edgeWeights)
+            : this(edgeWeights, DistanceRelaxers.EdgeShortestDistance, new Dictionary<TVertex, double>())
+        { }
 
-        public VertexDistanceRecorderObserver(IDictionary<TVertex, int> distances)
+        public VertexDistanceRecorderObserver(
+            Func<TEdge, double> edgeWeights,
+            IDistanceRelaxer distanceRelaxer,
+            IDictionary<TVertex, double> distances)
         {
-            if (distances == null)
-                throw new ArgumentNullException("distances");
+            Contract.Requires(edgeWeights != null);
+            Contract.Requires(distanceRelaxer != null);
+            Contract.Requires(distances != null);
+
+            this.edgeWeights = edgeWeights;
+            this.distanceRelaxer = distanceRelaxer;
             this.distances = distances;
         }
 
-        public IDictionary<TVertex, int> Distances
+        public IDistanceRelaxer DistanceRelaxer
+        {
+            get { return this.distanceRelaxer; }
+        }
+
+        public Func<TEdge, double> EdgeWeights
+        {
+            get { return this.edgeWeights; }
+        }
+
+        public IDictionary<TVertex, double> Distances
         {
             get { return this.distances; }
         }
 
-        public void Attach(IDistanceRecorderAlgorithm<TVertex, TEdge> algorithm)
+        public IDisposable Attach(ITreeBuilderAlgorithm<TVertex, TEdge> algorithm)
         {
-            if (algorithm == null)
-                throw new ArgumentNullException("algorithm");
-
-            algorithm.TreeEdge += new EdgeEventHandler<TVertex, TEdge>(this.TreeEdge);
+            algorithm.TreeEdge += new EdgeAction<TVertex, TEdge>(this.TreeEdge);
+            return new DisposableAction(
+                () => algorithm.TreeEdge -= new EdgeAction<TVertex, TEdge>(this.TreeEdge)
+                );
         }
 
-        public void Detach(IDistanceRecorderAlgorithm<TVertex, TEdge> algorithm)
+        private void TreeEdge(TEdge edge)
         {
-            if (algorithm == null)
-                throw new ArgumentNullException("arg");
+            var source = edge.Source;
+            var target = edge.Target;
 
-            algorithm.TreeEdge -= new EdgeEventHandler<TVertex, TEdge>(this.TreeEdge);
-        }
-
-        private void TreeEdge(Object sender, EdgeEventArgs<TVertex,TEdge> args)
-        {
-            int sourceDistance;
-            if(!this.distances.TryGetValue(args.Edge.Source, out sourceDistance))
-                this.distances[args.Edge.Source] = sourceDistance = 0;
-            this.distances[args.Edge.Target] = sourceDistance + 1;
+            double sourceDistance;
+            if (!this.distances.TryGetValue(source, out sourceDistance))
+                this.distances[source] = sourceDistance = this.distanceRelaxer.InitialDistance;
+            this.distances[target] = this.DistanceRelaxer.Combine(sourceDistance, this.edgeWeights(edge));
         }
     }
 }

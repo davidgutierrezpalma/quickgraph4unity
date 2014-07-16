@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Services
 {
@@ -19,7 +20,8 @@ namespace QuickGraph.Algorithms.Services
 
         public AlgorithmServices(IAlgorithmComponent host)
         {
-            GraphContracts.AssumeNotNull(host, "host");
+            Contract.Requires(host != null);
+
             this.host = host;
         }
 

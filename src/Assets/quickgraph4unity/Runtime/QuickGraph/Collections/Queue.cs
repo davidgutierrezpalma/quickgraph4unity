@@ -3,8 +3,10 @@
     using System;
     using System.Collections.Generic;
 
+#if !SILVERLIGHT
     [Serializable]
-    public class Queue<T> : 
+#endif
+    public sealed class Queue<T> : 
         System.Collections.Generic.Queue<T>,
         IQueue<T>
     {

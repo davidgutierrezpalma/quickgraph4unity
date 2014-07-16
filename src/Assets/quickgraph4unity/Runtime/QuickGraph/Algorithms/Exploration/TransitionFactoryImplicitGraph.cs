@@ -1,22 +1,25 @@
-﻿using System;
+﻿#if !SILVERLIGHT
+using System;
 using System.Collections.Generic;
-using System.Web;
-
 using QuickGraph.Predicates;
+using System.Diagnostics.Contracts;
+using QuickGraph.Collections;
 
 namespace QuickGraph.Algorithms.Exploration
 {
-    public sealed class TransitionFactoryImplicitGraph<TVertex,TEdge> :
-        IImplicitGraph<TVertex,TEdge>
+    public sealed class TransitionFactoryImplicitGraph<TVertex,TEdge> 
+        : IImplicitGraph<TVertex,TEdge>
         where TVertex : ICloneable
         where TEdge : IEdge<TVertex>
     {
-        private IList<ITransitionFactory<TVertex, TEdge>> transitionFactories
+        private readonly VertexEdgeDictionary<TVertex, TEdge> vertedEdges =
+            new VertexEdgeDictionary<TVertex, TEdge>();
+        private readonly List<ITransitionFactory<TVertex, TEdge>> transitionFactories
             = new List<ITransitionFactory<TVertex, TEdge>>();
         private VertexPredicate<TVertex> successorVertexPredicate
-            = new AnyVertexPredicate<TVertex>().Test;
+            = v => true;
         private EdgePredicate<TVertex, TEdge> successorEdgePredicate
-            = new AnyEdgePredicate<TVertex, TEdge>().Test;
+            = e => true;
 
         public TransitionFactoryImplicitGraph()
         {}
@@ -38,11 +41,13 @@ namespace QuickGraph.Algorithms.Exploration
             set { this.successorEdgePredicate = value; }
         }
 
+        [Pure]
         public bool IsOutEdgesEmpty(TVertex v)
         {
             return this.OutDegree(v) == 0;
         }
 
+        [Pure]
         public int OutDegree(TVertex v)
         {
             int i = 0;
@@ -51,23 +56,45 @@ namespace QuickGraph.Algorithms.Exploration
             return i;
         }
 
-        public IEnumerable<TEdge> OutEdges(TVertex v)
+        [Pure]
+        public bool ContainsVertex(TVertex vertex)
         {
-            foreach (ITransitionFactory<TVertex, TEdge> transitionFactory
-                in this.TransitionFactories)
-            {
-                if (!transitionFactory.IsValid(v))
-                    continue;
-
-                foreach (var edge in transitionFactory.Apply(v))
-                {
-                    if (this.SuccessorVertexPredicate(edge.Target) &&
-                        this.SuccessorEdgePredicate(edge))
-                        yield return edge;
-                }
-            }
+            return this.vertedEdges.ContainsKey(vertex);
         }
 
+        [Pure]
+        public IEnumerable<TEdge> OutEdges(TVertex v)
+        {
+            IEdgeList<TVertex, TEdge> edges;
+            if (!this.vertedEdges.TryGetValue(v, out edges))
+            {
+                edges = new EdgeList<TVertex, TEdge>();
+                foreach (ITransitionFactory<TVertex, TEdge> transitionFactory
+                    in this.TransitionFactories)
+                {
+                    if (!transitionFactory.IsValid(v))
+                        continue;
+
+                    foreach (var edge in transitionFactory.Apply(v))
+                    {
+                        if (this.SuccessorVertexPredicate(edge.Target) &&
+                            this.SuccessorEdgePredicate(edge))
+                            edges.Add(edge);
+                    }
+                }
+                this.vertedEdges[v] = edges;
+            }
+            return edges;
+        }
+
+        [Pure]
+        public bool TryGetOutEdges(TVertex v, out IEnumerable<TEdge> edges)
+        {
+            edges = this.OutEdges(v);
+            return true;
+        }
+
+        [Pure]
         public TEdge OutEdge(TVertex v, int index)
         {
             int i = 0;
@@ -86,5 +113,7 @@ namespace QuickGraph.Algorithms.Exploration
         {
             get { return true; }
         }
+
     }
 }
+#endif

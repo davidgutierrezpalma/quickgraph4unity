@@ -1,34 +1,37 @@
 ﻿using System;
 using System.Collections.Generic;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.MaximumFlow
 {
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class ReversedEdgeAugmentorAlgorithm<TVertex, TEdge>
+        : IDisposable
         where TEdge : IEdge<TVertex>
     {
-        private IMutableVertexAndEdgeListGraph<TVertex,TEdge> visitedGraph;
-        private IEdgeFactory<TVertex, TEdge> edgeFactory;
+        private readonly IMutableVertexAndEdgeListGraph<TVertex,TEdge> visitedGraph;
+        private readonly EdgeFactory<TVertex, TEdge> edgeFactory;
         private IList<TEdge> augmentedEgdes = new List<TEdge>();
-        private IDictionary<TEdge,TEdge> reversedEdges = new Dictionary<TEdge,TEdge>();
+        private Dictionary<TEdge,TEdge> reversedEdges = new Dictionary<TEdge,TEdge>();
         private bool augmented = false;
 
         public ReversedEdgeAugmentorAlgorithm(
             IMutableVertexAndEdgeListGraph<TVertex, TEdge> visitedGraph,
-            IEdgeFactory<TVertex, TEdge> edgeFactory)
+            EdgeFactory<TVertex, TEdge> edgeFactory)
             : this(null, visitedGraph, edgeFactory)
         { }
 
         public ReversedEdgeAugmentorAlgorithm(
             IAlgorithmComponent host,
             IMutableVertexAndEdgeListGraph<TVertex,TEdge> visitedGraph,
-            IEdgeFactory<TVertex,TEdge> edgeFactory)
+            EdgeFactory<TVertex,TEdge> edgeFactory)
         {
-            if (visitedGraph == null)
-                throw new ArgumentNullException("visitedGraph");
-            if (edgeFactory == null)
-                throw new ArgumentNullException("edgeFactory");
+            Contract.Requires(visitedGraph != null);
+            Contract.Requires(edgeFactory != null);
+
             this.visitedGraph = visitedGraph;
             this.edgeFactory = edgeFactory;
         }
@@ -41,7 +44,7 @@ namespace QuickGraph.Algorithms.MaximumFlow
             }
         }
 
-        public IEdgeFactory<TVertex, TEdge> EdgeFactory
+        public EdgeFactory<TVertex, TEdge> EdgeFactory
         {
             get { return this.edgeFactory; }
         }
@@ -54,7 +57,7 @@ namespace QuickGraph.Algorithms.MaximumFlow
             }
         }
 
-        public IDictionary<TEdge,TEdge> ReversedEdges
+        public Dictionary<TEdge,TEdge> ReversedEdges
         {
             get
             {
@@ -70,11 +73,12 @@ namespace QuickGraph.Algorithms.MaximumFlow
             }
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> ReversedEdgeAdded;
-        private void OnReservedEdgeAdded(EdgeEventArgs<TVertex,TEdge> e)
+        public event EdgeAction<TVertex,TEdge> ReversedEdgeAdded;
+        private void OnReservedEdgeAdded(TEdge e)
         {
-            if (this.ReversedEdgeAdded != null)
-                this.ReversedEdgeAdded(this, e);
+            var eh = this.ReversedEdgeAdded;
+            if (eh != null)
+                eh(e);
         }
 
         public void AddReversedEdges()
@@ -119,13 +123,13 @@ namespace QuickGraph.Algorithms.MaximumFlow
                 }
 
                 // need to create one
-                reversedEdge = this.edgeFactory.CreateEdge(edge.Target, edge.Source);
+                reversedEdge = this.edgeFactory(edge.Target, edge.Source);
                 if (!this.VisitedGraph.AddEdge(reversedEdge))
                     throw new InvalidOperationException("We should not be here");
                 this.augmentedEgdes.Add(reversedEdge);
                 this.reversedEdges[edge] = reversedEdge;
                 this.reversedEdges[reversedEdge] = edge;
-                this.OnReservedEdgeAdded(new EdgeEventArgs<TVertex,TEdge>(reversedEdge));
+                this.OnReservedEdgeAdded(reversedEdge);
             }
 
             this.augmented = true;
@@ -151,6 +155,12 @@ namespace QuickGraph.Algorithms.MaximumFlow
                 if (redge.Target.Equals(edge.Source))
                     return redge;
             return default(TEdge);
+        }
+
+        void IDisposable.Dispose()
+        {
+            if(this.Augmented)
+                this.RemoveReversedEdges();
         }
     }
 }

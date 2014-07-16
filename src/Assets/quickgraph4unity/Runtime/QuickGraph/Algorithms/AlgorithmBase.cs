@@ -1,6 +1,7 @@
 ﻿using System;
 using QuickGraph.Algorithms.Services;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms
 {
@@ -20,18 +21,16 @@ namespace QuickGraph.Algorithms
         /// <param name="visitedGraph"></param>
         protected AlgorithmBase(IAlgorithmComponent host, TGraph visitedGraph)
         {
+            Contract.Requires(visitedGraph != null);
             if (host == null)
                 host = this;
-            if (visitedGraph == null)
-                throw new ArgumentNullException("visitedGraph");
             this.visitedGraph = visitedGraph;
             this.services = new AlgorithmServices(host);
         }
 
         protected AlgorithmBase(TGraph visitedGraph)
         {
-            if (visitedGraph == null)
-                throw new ArgumentNullException("visitedGraph");
+            Contract.Requires(visitedGraph != null);
             this.visitedGraph = visitedGraph;
             this.services = new AlgorithmServices(this);
         }
@@ -65,9 +64,23 @@ namespace QuickGraph.Algorithms
         public void Compute()
         {
             this.BeginComputation();
-            this.InternalCompute();
+            this.Initialize();
+            try
+            {
+                this.InternalCompute();
+            }
+            finally
+            {
+                this.Clean();
+            }
             this.EndComputation();
         }
+
+        protected virtual void Initialize()
+        { }
+
+        protected virtual void Clean()
+        { }
 
         protected abstract void InternalCompute();
 
@@ -121,11 +134,9 @@ namespace QuickGraph.Algorithms
 
         protected void BeginComputation()
         {
+            Contract.Requires(this.State == ComputationState.NotRunning);
             lock (this.syncRoot)
             {
-                if (this.state != ComputationState.NotRunning)
-                    throw new InvalidOperationException();
-
                 this.state = ComputationState.Running;
                 this.Services.CancelManager.ResetCancel();
                 this.OnStarted(EventArgs.Empty);
@@ -135,6 +146,9 @@ namespace QuickGraph.Algorithms
 
         protected void EndComputation()
         {
+            Contract.Requires(
+                this.State == ComputationState.Running || 
+                this.State == ComputationState.Aborted);
             lock (this.syncRoot)
             {
                 switch (this.state)
@@ -181,7 +195,7 @@ namespace QuickGraph.Algorithms
         Dictionary<Type, object> _services;
         protected virtual bool TryGetService(Type serviceType, out object service)
         {
-            GraphContracts.AssumeNotNull(serviceType, "serviceType");
+            Contract.Requires(serviceType != null);
             lock (this.SyncRoot)
             {
                 if (this._services == null)

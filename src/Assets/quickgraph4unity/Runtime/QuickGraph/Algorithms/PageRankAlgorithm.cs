@@ -5,7 +5,9 @@ using QuickGraph.Collections;
 
 namespace QuickGraph.Algorithms.Ranking
 {
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class PageRankAlgorithm<TVertex, TEdge> :
         AlgorithmBase<IBidirectionalGraph<TVertex, TEdge>>
         where TEdge : IEdge<TVertex>
@@ -115,7 +117,7 @@ namespace QuickGraph.Algorithms.Ranking
                 > fg = new FilteredBidirectionalGraph<TVertex, TEdge, IBidirectionalGraph<TVertex, TEdge>>(
                 this.VisitedGraph,
                 new InDictionaryVertexPredicate<TVertex,double>(this.ranks).Test,
-                new AnyEdgePredicate<TVertex,TEdge>().Test
+                e => true
                 );
 
             int iter = 0;
@@ -155,7 +157,6 @@ namespace QuickGraph.Algorithms.Ranking
 
                 iter++;
             } while (error > this.tolerance && iter < this.maxIterations);
-            Console.WriteLine("{0}, {1}", iter, error);
         }
 
         public double GetRanksSum()

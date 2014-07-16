@@ -1,32 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms
 {
-    [Serializable]
     public static class RandomGraphFactory
     {
         public static TVertex GetVertex<TVertex,TEdge>(IVertexListGraph<TVertex,TEdge> g, Random rnd)
             where TEdge : IEdge<TVertex>
         {
-            if (g == null)
-                throw new ArgumentNullException("g");
-            if (rnd == null)
-                throw new ArgumentNullException("random generator");
-            if (g.VertexCount == 0)
-                throw new ArgumentException("g is empty");
+            Contract.Requires(g != null);
+            Contract.Requires(rnd != null);
+            Contract.Requires(g.VertexCount > 0);
+
             return GetVertex<TVertex,TEdge>(g.Vertices, g.VertexCount, rnd);
         }
 
         public static TVertex GetVertex<TVertex,TEdge>(IEnumerable<TVertex> vertices, int count, Random rnd)
             where TEdge : IEdge<TVertex>
         {
-            if (vertices == null)
-                throw new ArgumentNullException("vertices");
-            if (rnd == null)
-                throw new ArgumentNullException("random generator");
-            if (count == 0)
-                throw new ArgumentException("vertices is empty");
+            Contract.Requires(vertices != null);
+            Contract.Requires(rnd != null);
+            Contract.Requires(count > 0);
 
             int i = rnd.Next(count);
             foreach (var v in vertices)
@@ -44,12 +39,9 @@ namespace QuickGraph.Algorithms
         public static TEdge GetEdge<TVertex, TEdge>(IEdgeSet<TVertex, TEdge> g, Random rnd)
             where TEdge : IEdge<TVertex>
         {
-            if (g == null)
-                throw new ArgumentNullException("g");
-            if (rnd == null)
-                throw new ArgumentNullException("random generator");
-            if (g.EdgeCount == 0)
-                throw new ArgumentException("g is empty");
+            Contract.Requires(g != null);
+            Contract.Requires(rnd != null);
+            Contract.Requires(g.EdgeCount > 0);
 
             int i = rnd.Next(g.EdgeCount);
             foreach (var e in g.Edges)
@@ -67,12 +59,9 @@ namespace QuickGraph.Algorithms
         public static TEdge GetEdge<TVertex,TEdge>(IEnumerable<TEdge> edges, int count, Random rnd)
             where TEdge : IEdge<TVertex>
         {
-            if (edges == null)
-                throw new ArgumentNullException("edges");
-            if (rnd == null)
-                throw new ArgumentNullException("random generator");
-            if (count == 0)
-                throw new ArgumentException("edges is empty");
+            Contract.Requires(edges != null);
+            Contract.Requires(rnd != null);
+            Contract.Requires(count > 0);
 
             int i = rnd.Next(count);
             foreach (var e in edges)
@@ -89,61 +78,86 @@ namespace QuickGraph.Algorithms
 
         public static void Create<TVertex, TEdge>(
             IMutableVertexAndEdgeListGraph<TVertex, TEdge> g,
+            VertexFactory<TVertex> vertexFactory,
+            EdgeFactory<TVertex,TEdge> edgeFactory,
             Random rnd,
             int vertexCount,
             int edgeCount,
             bool selfEdges
             ) where TEdge : IEdge<TVertex>
         {
-            Create<TVertex, TEdge>(
-                g,
-                FactoryCompiler.GetVertexFactory<TVertex>(),
-                FactoryCompiler.GetEdgeFactory<TVertex, TEdge>(),
-                rnd,
-                vertexCount,
-                edgeCount,
-                selfEdges
+            Contract.Requires(g != null);
+            Contract.Requires(vertexFactory != null);
+            Contract.Requires(edgeFactory != null);
+            Contract.Requires(rnd != null);
+            Contract.Requires(vertexCount > 0);
+            Contract.Requires(edgeCount >= 0);
+            Contract.Requires(
+                !(!g.AllowParallelEdges && !selfEdges) ||
+                edgeCount <= vertexCount * (vertexCount -1) // directed graph
                 );
-        }
 
-        public static void Create<TVertex, TEdge>(
-            IMutableVertexAndEdgeListGraph<TVertex, TEdge> g,
-            IVertexFactory<TVertex> vertexFactory,
-            IEdgeFactory<TVertex,TEdge> edgeFactory,
-            Random rnd,
-            int vertexCount,
-            int edgeCount,
-            bool selfEdges
-            ) where TEdge : IEdge<TVertex>
-        {
-            if (g == null)
-                throw new ArgumentNullException("g");
-            if (vertexFactory == null)
-                throw new ArgumentNullException("vertexFactory");
-            if (edgeFactory == null)
-                throw new ArgumentNullException("edgeFactory");
-            if (rnd == null)
-                throw new ArgumentNullException("random generator");
-
-
+            var vertices = new TVertex[vertexCount];
             for (int i = 0; i < vertexCount; ++i)
-                g.AddVertex( vertexFactory.CreateVertex() );
-
+                g.AddVertex(vertices[i] = vertexFactory());
 
             TVertex a;
             TVertex b;
             int j = 0;
             while (j < edgeCount)
             {
-                a = GetVertex(g, rnd);
+                a = vertices[rnd.Next(vertexCount)];
                 do
                 {
-                    b = GetVertex(g, rnd);
+                    b = vertices[rnd.Next(vertexCount)];
                 }
                 while (selfEdges == false && a.Equals(b));
 
-                if (g.AddEdge( edgeFactory.CreateEdge(a,b)))
+                if (g.AddEdge( edgeFactory(a,b)))
                       ++j;
+            }
+        }
+
+
+        public static void Create<TVertex, TEdge>(
+            IMutableUndirectedGraph<TVertex, TEdge> g,
+            VertexFactory<TVertex> vertexFactory,
+            EdgeFactory<TVertex, TEdge> edgeFactory,
+            Random rnd,
+            int vertexCount,
+            int edgeCount,
+            bool selfEdges
+            ) where TEdge : IEdge<TVertex>
+        {
+            Contract.Requires(g != null);
+            Contract.Requires(vertexFactory != null);
+            Contract.Requires(edgeFactory != null);
+            Contract.Requires(rnd != null);
+            Contract.Requires(vertexCount > 0);
+            Contract.Requires(edgeCount >= 0);
+            Contract.Requires(
+                !(!g.AllowParallelEdges && !selfEdges) ||
+                edgeCount <= vertexCount * (vertexCount - 1) / 2
+                );
+
+            var vertices = new TVertex[vertexCount];
+            for (int i = 0; i < vertexCount; ++i)
+                g.AddVertex(vertices[i] = vertexFactory());
+
+            TVertex a;
+            TVertex b;
+            int j = 0;
+            while (j < edgeCount)
+            {
+                a = vertices[rnd.Next(vertexCount)];
+                do
+                {
+                    b = vertices[rnd.Next(vertexCount)];
+                }
+                while (selfEdges == false && a.Equals(b));
+
+                if (g.AddEdge(edgeFactory(a, b)))
+                    ++j;
             }
         }
     }

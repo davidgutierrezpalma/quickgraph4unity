@@ -1,18 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
+using QuickGraph.Contracts;
 
 namespace QuickGraph
 {
-    public interface IUndirectedGraph<TVertex,TEdge> :
-        IVertexAndEdgeSet<TVertex,TEdge>,
-        IGraph<TVertex,TEdge>
+    /// <summary>
+    /// An undirected graph
+    /// </summary>
+    /// <typeparam name="TVertex"></typeparam>
+    /// <typeparam name="TEdge"></typeparam>
+    [ContractClass(typeof(IUndirectedGraphContract<,>))]
+    public interface IUndirectedGraph<TVertex,TEdge> 
+        : IImplicitUndirectedGraph<TVertex, TEdge>
+        , IEdgeListGraph<TVertex,TEdge>
+        , IGraph<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
     {
-        IEnumerable<TEdge> AdjacentEdges(TVertex v);
-        int AdjacentDegree(TVertex v);
-        bool IsAdjacentEdgesEmpty(TVertex v);
-        TEdge AdjacentEdge(TVertex v, int index);
-
-        bool ContainsEdge(TVertex source, TVertex target);
     }
 }

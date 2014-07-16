@@ -1,14 +1,16 @@
-﻿using System;
+﻿#if !SILVERLIGHT
+using System;
 using System.Collections.Generic;
 
 using QuickGraph.Predicates;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Exploration
 {
-    public sealed class CloneableVertexGraphExplorerAlgorithm<TVertex,TEdge> :
-        RootedAlgorithmBase<TVertex,IMutableVertexAndEdgeListGraph<TVertex, TEdge>>,
-        ITreeBuilderAlgorithm<TVertex,TEdge>
+    public sealed class CloneableVertexGraphExplorerAlgorithm<TVertex,TEdge> 
+        : RootedAlgorithmBase<TVertex, IMutableVertexAndEdgeSet<TVertex, TEdge>>
+        , ITreeBuilderAlgorithm<TVertex,TEdge>
         where TVertex : ICloneable, IComparable<TVertex>
         where TEdge : IEdge<TVertex>
     {
@@ -16,11 +18,11 @@ namespace QuickGraph.Algorithms.Exploration
 
         private Queue<TVertex> unexploredVertices = new Queue<TVertex>();
 
-        private VertexPredicate<TVertex> addVertexPredicate = new AnyVertexPredicate<TVertex>().Test;
-        private VertexPredicate<TVertex> exploreVertexPredicate = new AnyVertexPredicate<TVertex>().Test;
-        private EdgePredicate<TVertex, TEdge> addEdgePredicate = new AnyEdgePredicate<TVertex, TEdge>().Test;
-        private IPredicate<CloneableVertexGraphExplorerAlgorithm<TVertex, TEdge>> finishedPredicate =
-            new DefaultFinishedPredicate();
+        private VertexPredicate<TVertex> addVertexPredicate = v => true;
+        private VertexPredicate<TVertex> exploreVertexPredicate = v => true;
+        private EdgePredicate<TVertex, TEdge> addEdgePredicate = e => true;
+        private Predicate<CloneableVertexGraphExplorerAlgorithm<TVertex, TEdge>> finishedPredicate =
+            new DefaultFinishedPredicate().Test;
         private bool finishedSuccessfully;
 
         public CloneableVertexGraphExplorerAlgorithm(
@@ -31,7 +33,7 @@ namespace QuickGraph.Algorithms.Exploration
 
         public CloneableVertexGraphExplorerAlgorithm(
             IAlgorithmComponent host,
-            IMutableVertexAndEdgeListGraph<TVertex, TEdge> visitedGraph
+            IMutableVertexAndEdgeSet<TVertex, TEdge> visitedGraph
             )
             :base(host, visitedGraph)
         {}
@@ -59,7 +61,7 @@ namespace QuickGraph.Algorithms.Exploration
             set { this.addEdgePredicate = value; }
         }
 
-        public IPredicate<CloneableVertexGraphExplorerAlgorithm<TVertex, TEdge>> FinishedPredicate
+        public Predicate<CloneableVertexGraphExplorerAlgorithm<TVertex, TEdge>> FinishedPredicate
         {
             get { return this.finishedPredicate; }
             set { this.finishedPredicate = value; }
@@ -75,31 +77,42 @@ namespace QuickGraph.Algorithms.Exploration
             get { return this.finishedSuccessfully; }
         }
 
-        public event VertexEventHandler<TVertex> DiscoverVertex;
+        public event VertexAction<TVertex> DiscoverVertex;
         private void OnDiscoverVertex(TVertex v)
         {
+            Contract.Requires(v != null);
+
             this.VisitedGraph.AddVertex(v);
             this.unexploredVertices.Enqueue(v);
-            if (this.DiscoverVertex != null)
-                this.DiscoverVertex(this, new VertexEventArgs<TVertex>(v));
+
+            var eh = this.DiscoverVertex;
+            if (eh != null)
+                eh(v);
         }
-        public event EdgeEventHandler<TVertex,TEdge> TreeEdge;
+        public event EdgeAction<TVertex,TEdge> TreeEdge;
         private void OnTreeEdge(TEdge e)
         {
-            if (this.TreeEdge != null)
-                this.TreeEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+            Contract.Requires(e != null);
+
+            var eh = this.TreeEdge;
+            if (eh != null)
+                eh(e);
         }
-        public event EdgeEventHandler<TVertex, TEdge> BackEdge;
+        public event EdgeAction<TVertex, TEdge> BackEdge;
         private void OnBackEdge(TEdge e)
         {
-            if (this.BackEdge != null)
-                this.BackEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+            Contract.Requires(e != null);
+            var eh = this.BackEdge;
+            if (eh != null)
+                eh(e);
         }
-        public event EdgeEventHandler<TVertex, TEdge> EdgeSkipped;
+        public event EdgeAction<TVertex, TEdge> EdgeSkipped;
         private void OnEdgeSkipped(TEdge e)
         {
-            if (this.EdgeSkipped != null)
-                this.EdgeSkipped(this, new EdgeEventArgs<TVertex, TEdge>(e));
+            Contract.Requires(e != null);
+            var eh = this.EdgeSkipped;
+            if (eh != null)
+                eh(e);
         }
 
         protected override void  InternalCompute()
@@ -119,7 +132,7 @@ namespace QuickGraph.Algorithms.Exploration
             while (unexploredVertices.Count > 0)
             {
                 // are we done yet ?
-                if (!this.FinishedPredicate.Test(this))
+                if (!this.FinishedPredicate(this))
                 {
                     this.finishedSuccessfully = false;
                     return;
@@ -171,8 +184,7 @@ namespace QuickGraph.Algorithms.Exploration
             }
         }
 
-        public sealed class DefaultFinishedPredicate :
-            IPredicate<CloneableVertexGraphExplorerAlgorithm<TVertex, TEdge>>
+        public sealed class DefaultFinishedPredicate
         {
             private int maxVertexCount = 1000;
             private int maxEdgeCount = 1000;
@@ -211,3 +223,4 @@ namespace QuickGraph.Algorithms.Exploration
         }
     }
 }
+#endif

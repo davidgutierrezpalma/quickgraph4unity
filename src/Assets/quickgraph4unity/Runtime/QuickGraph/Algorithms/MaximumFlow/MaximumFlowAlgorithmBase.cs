@@ -1,86 +1,58 @@
 ﻿using System;
 using System.Collections.Generic;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.MaximumFlow
 {
     /// <summary>
     /// Abstract base class for maximum flow algorithms.
     /// </summary>
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public abstract class MaximumFlowAlgorithm<TVertex, TEdge> :
-        AlgorithmBase<IVertexListGraph<TVertex, TEdge>>,
+        AlgorithmBase<IMutableVertexAndEdgeListGraph<TVertex, TEdge>>,
         IVertexColorizerAlgorithm<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
     {
-        private IDictionary<TVertex,TEdge> predecessors;
-        private IDictionary<TEdge,double> capacities;
-        private IDictionary<TEdge,double> residualCapacities;
-        private IDictionary<TEdge,TEdge> reversedEdges;
-        private IDictionary<TVertex,GraphColor> vertexColors;
         private TVertex source;
         private TVertex sink;
-        private double maxFlow = 0;
 
         protected MaximumFlowAlgorithm(
             IAlgorithmComponent host,
-            IVertexListGraph<TVertex,TEdge> visitedGraph,
-            IDictionary<TEdge, double> capacities,
-            IDictionary<TEdge,TEdge> reversedEdges
+            IMutableVertexAndEdgeListGraph<TVertex, TEdge> visitedGraph,
+            Func<TEdge, double> capacities,
+            EdgeFactory<TVertex, TEdge> edgeFactory
             )
-            :base(host, visitedGraph)
+            : base(host, visitedGraph)
         {
-            if (capacities == null)
-                throw new ArgumentNullException("capacities");
-            if (reversedEdges == null)
-                throw new ArgumentNullException("reversedEdges");
-
-            this.capacities = capacities;
-            this.reversedEdges = reversedEdges;
-
-            this.predecessors = new Dictionary<TVertex,TEdge>();
-            this.residualCapacities = new Dictionary<TEdge,double>();
-            this.vertexColors = new Dictionary<TVertex, GraphColor>();
+            Contract.Requires(capacities != null);
+            
+            this.Capacities = capacities;
+            this.Predecessors = new Dictionary<TVertex, TEdge>();
+            this.EdgeFactory = edgeFactory;
+            this.ResidualCapacities = new Dictionary<TEdge, double>();
+            this.VertexColors = new Dictionary<TVertex, GraphColor>();
         }
 
-        public IDictionary<TVertex,TEdge> Predecessors
-        {
-            get
-            {
-                return predecessors;
-            }
-        }
+        #region Properties
 
-        public IDictionary<TEdge,double> Capacities
-        {
-            get
-            {
-                return capacities;
-            }
-        }
+        public Dictionary<TVertex,TEdge> Predecessors { get; private set; }
 
-        public IDictionary<TEdge,double> ResidualCapacities
-        {
-            get
-            {
-                return residualCapacities;
-            }
-        }
+        public Func<TEdge,double> Capacities { get; private set; }
+       
+        public Dictionary<TEdge,double> ResidualCapacities { get; private set; }
 
-        public IDictionary<TEdge,TEdge> ReversedEdges
-        {
-            get
-            {
-                return reversedEdges;
-            }
-        }
+        public EdgeFactory<TVertex, TEdge> EdgeFactory { get; private set; }
 
-        public IDictionary<TVertex,GraphColor> VertexColors
+        public Dictionary<TEdge, TEdge> ReversedEdges { get; protected set; }
+
+        public Dictionary<TVertex,GraphColor> VertexColors { get; private set; }
+
+        public GraphColor GetVertexColor(TVertex vertex)
         {
-            get
-            {
-                return vertexColors;
-            }
+            return this.VertexColors[vertex];
         }
 
         public TVertex Source
@@ -88,8 +60,7 @@ namespace QuickGraph.Algorithms.MaximumFlow
             get { return this.source; }
             set 
             {
-                if (value == null)
-                    throw new ArgumentNullException("source");
+                Contract.Requires(value != null);
                 this.source = value; 
             }
         }
@@ -99,17 +70,14 @@ namespace QuickGraph.Algorithms.MaximumFlow
             get { return this.sink; }
             set 
             {
-                if (value == null)
-                    throw new ArgumentNullException("sink");
+                Contract.Requires(value != null);
                 this.sink = value; 
             }
         }
 
-        public double MaxFlow
-        {
-            get { return this.maxFlow; }
-            set { this.maxFlow = value; }
-        }
+        public double MaxFlow { get; set; }
+
+        #endregion
 
         public double Compute(TVertex source, TVertex sink)
         {

@@ -1,14 +1,17 @@
 ﻿using System;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph
 {
+#if !SILVERLIGHT
     [Serializable]
-    public class VertexEventArgs<TVertex> : EventArgs
+#endif
+    public abstract class VertexEventArgs<TVertex> : EventArgs
     {
         private readonly TVertex vertex;
-        public VertexEventArgs(TVertex vertex)
+        protected VertexEventArgs(TVertex vertex)
         {
-            GraphContracts.AssumeNotNull(vertex, "vertex");
+            Contract.Requires(vertex != null);
             this.vertex = vertex;
         }
 
@@ -18,7 +21,5 @@ namespace QuickGraph
         }
     }
 
-    public delegate void VertexEventHandler<Vertex>(
-        object sender,
-        VertexEventArgs<Vertex> e);
+    public delegate void VertexAction<TVertex>(TVertex vertex);
 }

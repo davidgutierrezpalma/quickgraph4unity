@@ -2,12 +2,15 @@
 using System.Collections.Generic;
 
 using QuickGraph.Algorithms.Observers;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.RandomWalks
 {
+#if !SILVERLIGHT
     [Serializable]
-    public sealed class RandomWalkAlgorithm<TVertex, TEdge> :
-        ITreeBuilderAlgorithm<TVertex,TEdge>
+#endif
+    public sealed class RandomWalkAlgorithm<TVertex, TEdge> 
+        : ITreeBuilderAlgorithm<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
     {
         private IImplicitGraph<TVertex,TEdge> visitedGraph;
@@ -23,10 +26,9 @@ namespace QuickGraph.Algorithms.RandomWalks
             IEdgeChain<TVertex,TEdge> edgeChain
             )
         {
-            if (visitedGraph == null)
-                throw new ArgumentNullException("visitedGraph");
-            if (edgeChain == null)
-                throw new ArgumentNullException("edgeChain");
+            Contract.Requires(visitedGraph != null);
+            Contract.Requires(edgeChain != null);
+
             this.visitedGraph = visitedGraph;
             this.edgeChain = edgeChain;
         }
@@ -47,8 +49,8 @@ namespace QuickGraph.Algorithms.RandomWalks
             }
             set
             {
-                if (value == null)
-                    throw new ArgumentNullException("edgeChain");
+                Contract.Requires(value != null);
+
                 this.edgeChain = value;
             }
         }
@@ -65,52 +67,50 @@ namespace QuickGraph.Algorithms.RandomWalks
             }
         }
 
-        public event VertexEventHandler<TVertex> StartVertex;
+        public event VertexAction<TVertex> StartVertex;
         private void OnStartVertex(TVertex v)
         {
             if (StartVertex != null)
-                StartVertex(this, new VertexEventArgs<TVertex>(v));
+                StartVertex(v);
         }
 
-        public event VertexEventHandler<TVertex> EndVertex;
+        public event VertexAction<TVertex> EndVertex;
         private void OnEndVertex(TVertex v)
         {
             if (EndVertex != null)
-                EndVertex(this, new VertexEventArgs<TVertex>(v));
+                EndVertex(v);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> TreeEdge;
+        public event EdgeAction<TVertex,TEdge> TreeEdge;
         private void OnTreeEdge(TEdge e)
         {
             if (this.TreeEdge != null)
-                this.TreeEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+                this.TreeEdge(e);
         }
 
-        private TEdge Successor(TVertex u)
+        private bool TryGetSuccessor(TVertex u, out TEdge successor)
         {
-            return this.EdgeChain.Successor(this.VisitedGraph, u);
+            return this.EdgeChain.TryGetSuccessor(this.VisitedGraph, u, out successor);
         }
 
         public void Generate(TVertex root)
         {
-            if (root == null)
-                throw new ArgumentNullException("root");
+            Contract.Requires(root != null);
+
             Generate(root, 100);
         }
 
         public void Generate(TVertex root, int walkCount)
         {
-            if (root == null)
-                throw new ArgumentNullException("root");
+            Contract.Requires(root != null);
 
             int count = 0;
             TEdge e = default(TEdge);
             TVertex v = root;
 
             OnStartVertex(root);
-            while (count < walkCount)
+            while (count < walkCount && this.TryGetSuccessor(v, out e))
             {
-                e = Successor(v);
                 // if dead end stop
                 if (e==null)
                     break;

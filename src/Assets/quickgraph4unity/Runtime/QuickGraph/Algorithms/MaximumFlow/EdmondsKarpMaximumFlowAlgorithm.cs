@@ -5,6 +5,7 @@ using QuickGraph.Algorithms.Observers;
 using QuickGraph.Predicates;
 using QuickGraph.Algorithms.Search;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.MaximumFlow
 {
@@ -13,28 +14,30 @@ namespace QuickGraph.Algorithms.MaximumFlow
     /// for directed graph with positive capacities and
     /// flows.
     /// </summary>
-    /// <typeparam name="Vertex"></typeparam>
-    /// <typeparam name="Edge"></typeparam>
+    /// <typeparam name="TVertex">type of a vertex</typeparam>
+    /// <typeparam name="TEdge">type of an edge</typeparam>
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class EdmondsKarpMaximumFlowAlgorithm<TVertex, TEdge>
         : MaximumFlowAlgorithm<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
     {
         public EdmondsKarpMaximumFlowAlgorithm(
-            IVertexListGraph<TVertex, TEdge> g,
-            IDictionary<TEdge, double> capacities,
-            IDictionary<TEdge, TEdge> reversedEdges
+            IMutableVertexAndEdgeListGraph<TVertex, TEdge> g,
+            Func<TEdge, double> capacities,
+            EdgeFactory<TVertex, TEdge> edgeFactory
             )
-            : this(null, g, capacities, reversedEdges)
+            : this(null, g, capacities, edgeFactory)
         { }
 
 		public EdmondsKarpMaximumFlowAlgorithm(
             IAlgorithmComponent host,
-			IVertexListGraph<TVertex,TEdge> g,
-			IDictionary<TEdge,double> capacities,
-			IDictionary<TEdge,TEdge> reversedEdges
+            IMutableVertexAndEdgeListGraph<TVertex, TEdge> g,
+			Func<TEdge,double> capacities,
+            EdgeFactory<TVertex, TEdge> edgeFactory
 			)
-			: base(host, g,capacities,reversedEdges)
+            : base(host, g, capacities, edgeFactory)
 		{}
 	
 		private IVertexListGraph<TVertex,TEdge> ResidualGraph
@@ -47,17 +50,21 @@ namespace QuickGraph.Algorithms.MaximumFlow
                         IVertexListGraph<TVertex,TEdge>
                         >(
         					VisitedGraph,
-                            new AnyVertexPredicate<TVertex>().Test,
+                            v => true,
 				        	new ResidualEdgePredicate<TVertex,TEdge>(ResidualCapacities).Test
     					);
 			}
 		}
+
 	
 		private void Augment(
-			TVertex src,
+			TVertex source,
 			TVertex sink
 			)
 		{
+            Contract.Requires(source != null);
+            Contract.Requires(sink != null);
+
 			TEdge e;
 			TVertex u;
 
@@ -69,7 +76,7 @@ namespace QuickGraph.Algorithms.MaximumFlow
                 e = Predecessors[u];
                 delta = Math.Min(delta, ResidualCapacities[e]);
                 u = e.Source;
-			} while (!u.Equals(src));
+			} while (!u.Equals(source));
 
 			// push delta units of flow along the augmenting path
             u = sink;
@@ -77,57 +84,65 @@ namespace QuickGraph.Algorithms.MaximumFlow
 			{
                 e = Predecessors[u];
                 ResidualCapacities[e] -= delta;
-                ResidualCapacities[ ReversedEdges[e] ] += delta;
+                if (ReversedEdges != null && ReversedEdges.ContainsKey(e))
+                {
+                    ResidualCapacities[ReversedEdges[e]] += delta;
+                }
 				u = e.Source;
-			} while (!u.Equals(src));
+			} while (!u.Equals(source));
 		}
     
 		/// <summary>
-		/// Computes the maximum flow between <paramref name="src"/> and
-		/// <paramref name="sink"/>
+		/// Computes the maximum flow between Source and Sink.
 		/// </summary>
-		/// <param name="src"></param>
-		/// <param name="sink"></param>
 		/// <returns></returns>
-		protected override void InternalCompute()
-		{
-			if (this.Source==null)
-				throw new InvalidOperationException("Source is not specified");
-			if (this.Sink==null)
+        protected override void InternalCompute()
+        {
+            if (this.Source == null)
+                throw new InvalidOperationException("Source is not specified");
+            if (this.Sink == null)
                 throw new InvalidOperationException("Sink is not specified");
 
-            foreach(TVertex u in VisitedGraph.Vertices)
-			{
-				foreach(TEdge e in VisitedGraph.OutEdges(u))
-				{
-					ResidualCapacities[e] = Capacities[e];   			
-				}
-			}
-    
-			VertexColors[Sink] = GraphColor.Gray;
-			while (VertexColors[Sink] != GraphColor.White)
-			{
-                VertexPredecessorRecorderObserver<TVertex,TEdge> vis = new VertexPredecessorRecorderObserver<TVertex,TEdge>(
-                    Predecessors
-					);
-				var Q = new QuickGraph.Collections.Queue<TVertex>();
-				var bfs = new BreadthFirstSearchAlgorithm<TVertex,TEdge>(
-					ResidualGraph,
-					Q,
-					VertexColors
-					);
-                vis.Attach(bfs);
-                bfs.Compute(this.Source);
-                vis.Detach(bfs);
 
-                if (VertexColors[this.Sink] != GraphColor.White)
-					Augment(this.Source, this.Sink);
-			} // while
+            if (this.Services.CancelManager.IsCancelling)
+                return;
+
+            var g = this.VisitedGraph;
+            foreach (var u in g.Vertices)
+                foreach (var e in g.OutEdges(u))
+                {
+                    var capacity = this.Capacities(e);
+                    if (capacity < 0)
+                        throw new InvalidOperationException("negative edge capacity");
+                    this.ResidualCapacities[e] = capacity;
+                }
+
+            this.VertexColors[Sink] = GraphColor.Gray;
+            while (this.VertexColors[Sink] != GraphColor.White)
+            {
+                var vis = new VertexPredecessorRecorderObserver<TVertex, TEdge>(
+                    this.Predecessors
+                    );
+                var queue = new QuickGraph.Collections.Queue<TVertex>();
+                var bfs = new BreadthFirstSearchAlgorithm<TVertex, TEdge>(
+                    this.ResidualGraph,
+                    queue,
+                    this.VertexColors
+                    );
+                using (vis.Attach(bfs))
+                    bfs.Compute(this.Source);
+
+                if (this.VertexColors[this.Sink] != GraphColor.White)
+                    this.Augment(this.Source, this.Sink);
+            } // while
 
             this.MaxFlow = 0;
-            foreach(TEdge e in VisitedGraph.OutEdges(Source))
-				this.MaxFlow += (Capacities[e] - ResidualCapacities[e]);
-		} 
+            foreach (var e in g.OutEdges(Source))
+                this.MaxFlow += (this.Capacities(e) - this.ResidualCapacities[e]);
+
+
+           
+        }
 	}
 
 }

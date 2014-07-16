@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Search
 {
@@ -15,7 +16,9 @@ namespace QuickGraph.Algorithms.Search
     ///     idref="gross98graphtheory"
     ///     chapter="4.2"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class EdgeDepthFirstSearchAlgorithm<TVertex, TEdge> :
         RootedAlgorithmBase<TVertex,IEdgeListAndIncidenceGraph<TVertex, TEdge>>,
         IEdgeColorizerAlgorithm<TVertex,TEdge>,
@@ -45,8 +48,7 @@ namespace QuickGraph.Algorithms.Search
             )
             :base(host, visitedGraph)
         {
-            if (colors == null)
-                throw new ArgumentNullException("VertexColors");
+            Contract.Requires(colors != null);
 
             this.colors = colors;
         }
@@ -71,67 +73,72 @@ namespace QuickGraph.Algorithms.Search
             }
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> InitializeEdge;
+        public event EdgeAction<TVertex,TEdge> InitializeEdge;
         private void OnInitializeEdge(TEdge e)
         {
-            if (InitializeEdge != null)
-                InitializeEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.InitializeEdge;
+            if (eh != null)
+                eh(e);
         }
 
-        public event VertexEventHandler<TVertex> StartVertex;
+        public event VertexAction<TVertex> StartVertex;
         private void OnStartVertex(TVertex v)
         {
-            if (StartVertex != null)
-                StartVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.StartVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public event EdgeEventHandler<TVertex, TEdge> StartEdge;
+        public event EdgeAction<TVertex, TEdge> StartEdge;
         private void OnStartEdge(TEdge e)
         {
             if (StartEdge != null)
-                StartEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                StartEdge(e);
         }
 
-        public event EdgeEdgeEventHandler<TVertex, TEdge> DiscoverTreeEdge;
+        public event EdgeEdgeAction<TVertex, TEdge> DiscoverTreeEdge;
         private void OnDiscoverTreeEdge(TEdge e, TEdge targetEge)
         {
-            if (DiscoverTreeEdge != null)
-                DiscoverTreeEdge(this, new EdgeEdgeEventArgs<TVertex, TEdge>(e, targetEge));
+            var eh = this.DiscoverTreeEdge;
+            if (eh != null)
+                eh(e, targetEge);
         }
 
-        public event EdgeEventHandler<TVertex, TEdge> ExamineEdge;
+        public event EdgeAction<TVertex, TEdge> ExamineEdge;
         private void OnExamineEdge(TEdge e)
         {
-            if (ExamineEdge != null)
-                ExamineEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+            var eh = this.ExamineEdge;
+            if (eh != null)
+                eh(e);
         }
 
-        public event EdgeEventHandler<TVertex, TEdge> TreeEdge;
+        public event EdgeAction<TVertex, TEdge> TreeEdge;
         private void OnTreeEdge(TEdge e)
         {
-            if (TreeEdge != null)
-                TreeEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+            var eh = this.TreeEdge;
+            if (eh != null)
+                eh(e);
         }
 
-        public event EdgeEventHandler<TVertex, TEdge> BackEdge;
+        public event EdgeAction<TVertex, TEdge> BackEdge;
         private void OnBackEdge(TEdge e)
         {
             if (BackEdge != null)
-                BackEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                BackEdge(e);
         }
 
-        public event EdgeEventHandler<TVertex, TEdge> ForwardOrCrossEdge;
+        public event EdgeAction<TVertex, TEdge> ForwardOrCrossEdge;
         private void OnForwardOrCrossEdge(TEdge e)
         {
             if (ForwardOrCrossEdge != null)
-                ForwardOrCrossEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                ForwardOrCrossEdge(e);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> FinishEdge;
+        public event EdgeAction<TVertex,TEdge> FinishEdge;
         private void OnFinishEdge(TEdge e)
         {
             if (FinishEdge != null)
-                FinishEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+                FinishEdge(e);
         }
         
         protected override void  InternalCompute()
@@ -173,7 +180,7 @@ namespace QuickGraph.Algorithms.Search
             }
         }
 
-        public void Initialize()
+        protected override void Initialize()
         {
             // put all vertex to white
             var cancelManager = this.Services.CancelManager;

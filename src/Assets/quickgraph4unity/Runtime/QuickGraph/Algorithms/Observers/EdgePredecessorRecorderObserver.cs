@@ -1,17 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Observers
 {
     /// <summary>
     /// 
     /// </summary>
-    /// <typeparam name="Vertex"></typeparam>
-    /// <typeparam name="Edge"></typeparam>
+    /// <typeparam name="TVertex">type of a vertex</typeparam>
+    /// <typeparam name="TEdge">type of an edge</typeparam>
     /// <reference-ref
     ///     idref="boost"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class EdgePredecessorRecorderObserver<TVertex, TEdge> :
         IObserver<IEdgePredecessorRecorderAlgorithm<TVertex, TEdge>>
         where TEdge : IEdge<TVertex>
@@ -28,10 +31,8 @@ namespace QuickGraph.Algorithms.Observers
             IList<TEdge> endPathEdges
             )
         {
-            if (edgePredecessors == null)
-                throw new ArgumentNullException("edgePredecessors");
-            if (endPathEdges == null)
-                throw new ArgumentNullException("endPathEdges");
+            Contract.Requires(edgePredecessors != null);
+            Contract.Requires(endPathEdges != null);
 
             this.edgePredecessors = edgePredecessors;
             this.endPathEdges = endPathEdges;
@@ -53,22 +54,17 @@ namespace QuickGraph.Algorithms.Observers
             }
         }
 
-        public void Attach(IEdgePredecessorRecorderAlgorithm<TVertex, TEdge> algorithm)
+        public IDisposable Attach(IEdgePredecessorRecorderAlgorithm<TVertex, TEdge> algorithm)
         {
-            if (algorithm == null)
-                throw new ArgumentNullException("algorithm");
+            algorithm.DiscoverTreeEdge += new EdgeEdgeAction<TVertex, TEdge>(this.DiscoverTreeEdge);
+            algorithm.FinishEdge += new EdgeAction<TVertex, TEdge>(this.FinishEdge);
 
-            algorithm.DiscoverTreeEdge +=new EdgeEdgeEventHandler<TVertex,TEdge>(this.DiscoverTreeEdge);
-            algorithm.FinishEdge +=new EdgeEventHandler<TVertex,TEdge>(this.FinishEdge);
-        }
-
-        public void Detach(IEdgePredecessorRecorderAlgorithm<TVertex, TEdge> algorithm)
-        {
-            if (algorithm == null)
-                throw new ArgumentNullException("algorithm");
-
-            algorithm.DiscoverTreeEdge -= new EdgeEdgeEventHandler<TVertex, TEdge>(this.DiscoverTreeEdge);
-            algorithm.FinishEdge -= new EdgeEventHandler<TVertex, TEdge>(this.FinishEdge);
+            return new DisposableAction(
+                () =>
+                {
+                    algorithm.DiscoverTreeEdge -= new EdgeEdgeAction<TVertex, TEdge>(this.DiscoverTreeEdge);
+                    algorithm.FinishEdge -= new EdgeAction<TVertex, TEdge>(this.FinishEdge);
+                });
         }
 
         public ICollection<TEdge> Path(TEdge se)
@@ -140,19 +136,19 @@ namespace QuickGraph.Algorithms.Observers
             return es;
         }
 
-        private void DiscoverTreeEdge(Object sender, EdgeEdgeEventArgs<TVertex,TEdge> args)
+        private void DiscoverTreeEdge(TEdge edge, TEdge targetEdge)
         {
-            if (!args.Edge.Equals(args.TargetEdge))
-                EdgePredecessors[args.TargetEdge] = args.Edge;
+            if (!edge.Equals(targetEdge))
+                this.EdgePredecessors[targetEdge] = edge;
         }
 
-        private void FinishEdge(Object sender, EdgeEventArgs<TVertex,TEdge> args)
+        private void FinishEdge(TEdge args)
         {
             foreach (var edge in this.EdgePredecessors.Values)
-                if (edge.Equals(args.Edge))
+                if (edge.Equals(args))
                     return;
 
-            this.EndPathEdges.Add(args.Edge);
+            this.EndPathEdges.Add(args);
         }
     }
 }

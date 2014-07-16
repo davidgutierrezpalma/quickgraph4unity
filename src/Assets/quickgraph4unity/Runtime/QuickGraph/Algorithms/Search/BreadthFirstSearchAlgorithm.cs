@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using QuickGraph.Collections;
 using QuickGraph.Algorithms.Observers;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Search
 {
@@ -14,17 +15,17 @@ namespace QuickGraph.Algorithms.Search
     ///     idref="gross98graphtheory"
     ///     chapter="4.2"
     ///     />
-    [Serializable]
-    public sealed class BreadthFirstSearchAlgorithm<TVertex, TEdge> :
-        RootedAlgorithmBase<TVertex, IVertexListGraph<TVertex, TEdge>>,
-        IVertexPredecessorRecorderAlgorithm<TVertex,TEdge>,
-        IDistanceRecorderAlgorithm<TVertex,TEdge>,
-        IVertexColorizerAlgorithm<TVertex,TEdge>,
-        ITreeBuilderAlgorithm<TVertex, TEdge>
+    public sealed class BreadthFirstSearchAlgorithm<TVertex, TEdge> 
+        : RootedAlgorithmBase<TVertex, IVertexListGraph<TVertex, TEdge>>
+        , IVertexPredecessorRecorderAlgorithm<TVertex,TEdge>
+        , IDistanceRecorderAlgorithm<TVertex,TEdge>
+        , IVertexColorizerAlgorithm<TVertex,TEdge>
+        , ITreeBuilderAlgorithm<TVertex, TEdge>
         where TEdge : IEdge<TVertex>
     {
         private IDictionary<TVertex, GraphColor> vertexColors;
         private IQueue<TVertex> vertexQueue;
+        private readonly Func<IEnumerable<TEdge>, IEnumerable<TEdge>> outEdgeEnumerator;
 
         public BreadthFirstSearchAlgorithm(IVertexListGraph<TVertex,TEdge> g)
             : this(g, new QuickGraph.Collections.Queue<TVertex>(), new Dictionary<TVertex, GraphColor>())
@@ -44,15 +45,30 @@ namespace QuickGraph.Algorithms.Search
             IQueue<TVertex> vertexQueue,
             IDictionary<TVertex, GraphColor> vertexColors
             )
-            :base(host, visitedGraph)
+            :this(host, visitedGraph, vertexQueue, vertexColors, e => e)
+        {}
+
+        public BreadthFirstSearchAlgorithm(
+            IAlgorithmComponent host,
+            IVertexListGraph<TVertex, TEdge> visitedGraph,
+            IQueue<TVertex> vertexQueue,
+            IDictionary<TVertex, GraphColor> vertexColors,
+            Func<IEnumerable<TEdge>, IEnumerable<TEdge>> outEdgeEnumerator
+            )
+            : base(host, visitedGraph)
         {
-            if (vertexQueue == null)
-                throw new ArgumentNullException("vertexQueue");
-            if (vertexColors == null)
-                throw new ArgumentNullException("vertexColors");
+            Contract.Requires(vertexQueue != null);
+            Contract.Requires(vertexColors != null);
+            Contract.Requires(outEdgeEnumerator != null);
 
             this.vertexColors = vertexColors;
             this.vertexQueue = vertexQueue;
+            this.outEdgeEnumerator = outEdgeEnumerator;
+        }
+
+        public Func<IEnumerable<TEdge>, IEnumerable<TEdge>> OutEdgeEnumerator
+        {
+            get { return this.outEdgeEnumerator; }
         }
 
         public IDictionary<TVertex,GraphColor> VertexColors
@@ -63,86 +79,102 @@ namespace QuickGraph.Algorithms.Search
             }
         }
 
-        public event VertexEventHandler<TVertex> InitializeVertex;
+        public GraphColor GetVertexColor(TVertex vertex)
+        {
+            return this.vertexColors[vertex];
+        }
+
+        public event VertexAction<TVertex> InitializeVertex;
         private void OnInitializeVertex(TVertex v)
         {
-            if (InitializeVertex != null)
-                InitializeVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.InitializeVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public event VertexEventHandler<TVertex> StartVertex;
+        public event VertexAction<TVertex> StartVertex;
         private void OnStartVertex(TVertex v)
         {
-            VertexEventHandler<TVertex> eh = this.StartVertex;
-            if (eh!=null)
-                eh(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.StartVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public event VertexEventHandler<TVertex> ExamineVertex;
+        public event VertexAction<TVertex> ExamineVertex;
         private void OnExamineVertex(TVertex v)
         {
-            if (ExamineVertex != null)
-                ExamineVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.ExamineVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public event VertexEventHandler<TVertex> DiscoverVertex;
+        public event VertexAction<TVertex> DiscoverVertex;
         private void OnDiscoverVertex(TVertex v)
         {
-            if (DiscoverVertex != null)
-                DiscoverVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.DiscoverVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> ExamineEdge;
+        public event EdgeAction<TVertex, TEdge> ExamineEdge;
         private void OnExamineEdge(TEdge e)
         {
-            if (ExamineEdge != null)
-                ExamineEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.ExamineEdge;
+            if (eh != null)
+                eh(e);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> TreeEdge;
+        public event EdgeAction<TVertex, TEdge> TreeEdge;
         private void OnTreeEdge(TEdge e)
         {
-            if (TreeEdge != null)
-                TreeEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.TreeEdge;
+            if (eh != null)
+                eh(e);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> NonTreeEdge;
+        public event EdgeAction<TVertex, TEdge> NonTreeEdge;
         private void OnNonTreeEdge(TEdge e)
         {
-            if (NonTreeEdge != null)
-                NonTreeEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.NonTreeEdge;
+            if (eh != null)
+                eh(e);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> GrayTarget;
+        public event EdgeAction<TVertex, TEdge> GrayTarget;
         private void OnGrayTarget(TEdge e)
         {
-            if (GrayTarget != null)
-                GrayTarget(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.GrayTarget;
+            if (eh != null)
+                eh(e);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> BlackTarget;
+        public event EdgeAction<TVertex, TEdge> BlackTarget;
         private void OnBlackTarget(TEdge e)
         {
-            if (BlackTarget != null)
-                BlackTarget(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.BlackTarget;
+            if (eh != null)
+                eh(e);
         }
 
-        public event VertexEventHandler<TVertex> FinishVertex;
+        public event VertexAction<TVertex> FinishVertex;
         private void OnFinishVertex(TVertex v)
         {
-            if (FinishVertex != null)
-                FinishVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.FinishVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public void Initialize()
+        protected override void Initialize()
         {
+            base.Initialize();
+
             var cancelManager = this.Services.CancelManager;
+            if (cancelManager.IsCancelling)
+                return;
             // initialize vertex u
             foreach (var v in VisitedGraph.Vertices)
             {
-                if (cancelManager.IsCancelling)
-                    return;
-                VertexColors[v] = GraphColor.White;
+                this.VertexColors[v] = GraphColor.White;
                 OnInitializeVertex(v);
             }
         }
@@ -152,18 +184,16 @@ namespace QuickGraph.Algorithms.Search
             if (this.VisitedGraph.VertexCount == 0)
                 return;
 
-            this.Initialize();
-
             TVertex rootVertex;
             if (!this.TryGetRootVertex(out rootVertex))
             {
                 // enqueue roots
-                foreach (var root in AlgoUtility.Roots(this.VisitedGraph))
+                foreach (var root in AlgorithmExtensions.Roots(this.VisitedGraph))
                     this.EnqueueRoot(root);
             }
             else // enqueue select root only
             {
-                this.Visit(rootVertex);
+                this.EnqueueRoot(rootVertex);
             }
             this.FlushVisitQueue();
         }
@@ -187,42 +217,38 @@ namespace QuickGraph.Algorithms.Search
         private void FlushVisitQueue()
         {
             var cancelManager = this.Services.CancelManager;
+            var oee = this.OutEdgeEnumerator;
 
-            while (this.vertexQueue.Count != 0)
+            while (this.vertexQueue.Count > 0)
             {
                 if (cancelManager.IsCancelling) return;
 
                 var u = this.vertexQueue.Dequeue();
-                OnExamineVertex(u);
-                foreach (var e in VisitedGraph.OutEdges(u))
+                this.OnExamineVertex(u);
+                foreach (var e in oee(this.VisitedGraph.OutEdges(u)))
                 {
                     TVertex v = e.Target;
-                    OnExamineEdge(e);
+                    this.OnExamineEdge(e);
 
-                    GraphColor vColor = VertexColors[v];
+                    var vColor = this.VertexColors[v];
                     if (vColor == GraphColor.White)
                     {
-                        OnTreeEdge(e);
-                        VertexColors[v] = GraphColor.Gray;
-                        OnDiscoverVertex(v);
+                        this.OnTreeEdge(e);
+                        this.VertexColors[v] = GraphColor.Gray;
+                        this.OnDiscoverVertex(v);
                         this.vertexQueue.Enqueue(v);
                     }
                     else
                     {
-                        OnNonTreeEdge(e);
+                        this.OnNonTreeEdge(e);
                         if (vColor == GraphColor.Gray)
-                        {
-                            OnGrayTarget(e);
-                        }
+                            this.OnGrayTarget(e);
                         else
-                        {
-                            OnBlackTarget(e);
-                        }
+                            this.OnBlackTarget(e);
                     }
                 }
-                VertexColors[u] = GraphColor.Black;
-
-                OnFinishVertex(u);
+                this.VertexColors[u] = GraphColor.Black;
+                this.OnFinishVertex(u);
             }
         }
     }

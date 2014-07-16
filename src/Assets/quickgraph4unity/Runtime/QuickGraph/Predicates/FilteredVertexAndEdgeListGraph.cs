@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Predicates
 {
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public class FilteredVertexAndEdgeListGraph<TVertex, TEdge, TGraph> :
         FilteredVertexListGraph<TVertex, TEdge, TGraph>,
         IVertexAndEdgeListGraph<TVertex, TEdge>
@@ -58,10 +61,11 @@ namespace QuickGraph.Predicates
             }
         }
 
+        [Pure]
         public bool ContainsEdge(TEdge edge)
         {
             foreach (var e in this.Edges)
-                if (Comparison<TEdge>.Equals(edge, e))
+                if (Comparer<TEdge>.Default.Compare(edge, e) == 0)
                     return true;
             return false;
         }

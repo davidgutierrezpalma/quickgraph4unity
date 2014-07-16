@@ -1,21 +1,36 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Diagnostics;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph
 {
+#if !SILVERLIGHT
     [Serializable]
-    public sealed class UndirectedBidirectionalGraph<TVertex,TEdge> :
+#endif
+    [DebuggerDisplay("VertexCount = {VertexCount}, EdgeCount = {EdgeCount}")]
+    public sealed class UndirectedBidirectionalGraph<TVertex, TEdge> :
         IUndirectedGraph<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
     {
         private readonly IBidirectionalGraph<TVertex, TEdge> visitedGraph;
+        private readonly EdgeEqualityComparer<TVertex, TEdge> edgeEqualityComparer =
+            EdgeExtensions.GetUndirectedVertexEquality<TVertex, TEdge>();
 
         public UndirectedBidirectionalGraph(IBidirectionalGraph<TVertex, TEdge> visitedGraph)
         {
-            if (visitedGraph == null)
-                throw new ArgumentNullException("visitedGraph");
+            Contract.Requires(visitedGraph != null);
+
             this.visitedGraph = visitedGraph;
+        }
+
+        public EdgeEqualityComparer<TVertex, TEdge> EdgeEqualityComparer
+        {
+            get
+            {
+                return this.edgeEqualityComparer;
+            }
         }
 
         public IBidirectionalGraph<TVertex, TEdge> VisitedGraph
@@ -25,6 +40,7 @@ namespace QuickGraph
 
         #region IUndirectedGraph<Vertex,Edge> Members
 
+        [Pure]
         public IEnumerable<TEdge> AdjacentEdges(TVertex v)
         {
             foreach (var e in this.VisitedGraph.OutEdges(v))
@@ -39,26 +55,34 @@ namespace QuickGraph
             }
         }
 
+        [Pure]
         public int AdjacentDegree(TVertex v)
         {
             return this.VisitedGraph.Degree(v);
         }
 
+        [Pure]
         public bool IsAdjacentEdgesEmpty(TVertex v)
         {
             return this.VisitedGraph.IsOutEdgesEmpty(v) && this.VisitedGraph.IsInEdgesEmpty(v);
         }
 
+        [Pure]
         public TEdge AdjacentEdge(TVertex v, int index)
         {
             throw new NotSupportedException();
         }
 
+        [Pure]
         public bool ContainsEdge(TVertex source, TVertex target)
         {
             throw new NotSupportedException();
         }
 
+        public bool TryGetEdge(TVertex source, TVertex target, out TEdge edge)
+        {
+            throw new NotSupportedException();
+        }
         #endregion
 
         #region IVertexSet<Vertex,Edge> Members
@@ -78,6 +102,7 @@ namespace QuickGraph
             get { return this.VisitedGraph.Vertices; }
         }
 
+        [Pure]
         public bool ContainsVertex(TVertex vertex)
         {
             return this.VisitedGraph.ContainsVertex(vertex);
@@ -102,6 +127,7 @@ namespace QuickGraph
             get { return this.VisitedGraph.Edges; }
         }
 
+        [Pure]
         public bool ContainsEdge(TEdge edge)
         {
             return this.VisitedGraph.ContainsEdge(edge);

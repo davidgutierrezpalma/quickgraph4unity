@@ -1,27 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
-
-using QuickGraph;
-using QuickGraph.Algorithms;
-
+/*
 namespace ModelDriven.Graph.Algorithms.Search
 {
 
     /// <summary>
     /// </summary>
     public sealed class HeightFirstSearchAlgorithm<Vertex,Edge> :
-		/*
         IAlgorithm<I,
         IPredecessorRecorderAlgorithm,
         ITimeStamperAlgorithm,
         IVertexColorizerAlgorithm,
         ITreeEdgeBuilderAlgorithm
-        */
-		RootedAlgorithmBase<Vertex, IUndirectedGraph<Vertex, Edge>>,
-		IEdgeColorizerAlgorithm<Vertex, Edge>,
-		IEdgePredecessorRecorderAlgorithm<Vertex, Edge>,
-		ITreeBuilderAlgorithm<Vertex, Edge>
-		where Edge : IEdge<Vertex>
     {
         private IBidirectionalVertexListGraph visitedGraph;
         private VertexColorDictionary colors;
@@ -401,3 +391,4 @@ namespace ModelDriven.Graph.Algorithms.Search
         }
     }
 }
+*/

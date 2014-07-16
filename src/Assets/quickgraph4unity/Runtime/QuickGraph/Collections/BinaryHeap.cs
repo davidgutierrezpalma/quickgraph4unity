@@ -2,13 +2,14 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Collections;
+using System.Diagnostics.Contracts;
+using System.Linq;
 
 namespace QuickGraph.Collections
 {
     /// <summary>
     /// Binary heap
     /// </summary>
-    /// <typeparam name="TValue"></typeparam>
     /// <remarks>
     /// Indexing rules:
     /// 
@@ -19,11 +20,13 @@ namespace QuickGraph.Collections
     /// Reference:
     /// http://dotnetslackers.com/Community/files/folders/data-structures-and-algorithms/entry28722.aspx
     /// </remarks>
+    /// <typeparam name="TValue">type of the value</typeparam>
+    /// <typeparam name="TPriority">type of the priority metric</typeparam>
     [DebuggerDisplay("Count = {Count}")]
-    public class BinaryHeap<TPriority, TValue> :
-        IEnumerable<KeyValuePair<TPriority, TValue>>
+    public class BinaryHeap<TPriority, TValue> 
+        : IEnumerable<KeyValuePair<TPriority, TValue>>
     {
-        readonly Comparison<TPriority> priorityComparsion;
+        readonly Func<TPriority, TPriority, int> priorityComparsion;
         KeyValuePair<TPriority, TValue>[] items;
         int count;
         int version;
@@ -34,22 +37,20 @@ namespace QuickGraph.Collections
             : this(DefaultCapacity, Comparer<TPriority>.Default.Compare)
         { }
 
-        public BinaryHeap(Comparison<TPriority> priorityComparison)
+        public BinaryHeap(Func<TPriority, TPriority, int> priorityComparison)
             : this(DefaultCapacity, priorityComparison)
         { }
 
-        public BinaryHeap(int capacity, Comparison<TPriority> priorityComparison)
+        public BinaryHeap(int capacity, Func<TPriority, TPriority, int> priorityComparison)
         {
-            if (capacity < 0)
-                throw new ArgumentOutOfRangeException("capacity");
-            if (priorityComparison == null)
-                throw new ArgumentNullException("priorityComparison");
+            Contract.Requires(capacity >= 0);
+            Contract.Requires(priorityComparison != null);
 
             this.items = new KeyValuePair<TPriority, TValue>[capacity];
             this.priorityComparsion = priorityComparison;
         }
 
-        public Comparison<TPriority> PriorityComparison
+        public Func<TPriority, TPriority, int> PriorityComparison
         {
             get { return this.priorityComparsion; }
         }
@@ -66,8 +67,6 @@ namespace QuickGraph.Collections
 
         public void Add(TPriority priority, TValue value)
         {
-            GraphContracts.Assert(count <= this.items.Length);
-
             this.version++;
             this.ResizeArray();
             this.items[this.count++] = new KeyValuePair<TPriority, TValue>(priority, value);
@@ -85,6 +84,14 @@ namespace QuickGraph.Collections
                 i = j;
                 j = (i - 1) / 2;
             }
+        }
+
+        public TValue[] ToValueArray()
+        {
+            var values = new TValue[this.items.Length];
+            for (int i = 0; i < values.Length; ++i)
+                values[i] = this.items[i].Value;
+            return values;
         }
 
         private void ResizeArray()
@@ -171,53 +178,80 @@ namespace QuickGraph.Collections
             return -1;
         }
 
+        public bool MinimumUpdate(TPriority priority, TValue value)
+        {
+            // find index
+            for (int i = 0; i < this.count; i++)
+            {
+                if (object.Equals(value, this.items[i].Value))
+                {
+                    if( this.priorityComparsion(priority, this.items[i].Key) <= 0)
+                    {
+                        this.RemoveAt(i);
+                        this.Add(priority, value);
+                        return true;
+                    }
+                    return false;
+                }
+            }
+
+            // not in collection
+            this.Add(priority, value);
+            return true;
+        }
+
         public void Update(TPriority priority, TValue value)
         {
             // find index
             var index = this.IndexOf(value);
-            if (index < 0)
-                throw new InvalidOperationException("value was not found in the heap");
-
-            // remove and add
-            this.RemoveAt(index);
+            // remove if needed
+            if (index > -1)
+                this.RemoveAt(index);
             this.Add(priority, value);
         }
 
+        [Pure]
         private bool Less(int i, int j)
         {
-            GraphContracts.Assert(i >= 0 & i < this.count &
-                         j >= 0 & j < this.count &
-                         i != j, String.Format("i: {0}, j: {1}", i, j));
+            Contract.Requires(
+                i >= 0 & i < this.count &
+                j >= 0 & j < this.count &
+                i != j);
 
             return this.priorityComparsion(this.items[i].Key, this.items[j].Key) <= 0;
         }
 
         private void Swap(int i, int j)
         {
-            GraphContracts.Assert(i >= 0 & i < this.count &
-                         j >= 0 & j < this.count &
-                         i != j);
+            Contract.Requires(
+                i >= 0 && i < this.count &&
+                j >= 0 && j < this.count &&
+                i != j);
 
             var kv = this.items[i];
             this.items[i] = this.items[j];
             this.items[j] = kv;
         }
 
-        [Conditional("DEBUG")]
-        public void ObjectInvariant()
+#if DEEP_INVARIANT
+        [ContractInvariantMethod]
+        void ObjectInvariant()
         {
-            GraphContracts.Assert(this.items != null);
-            GraphContracts.Assert(
+            Contract.Invariant(this.items != null);
+            Contract.Invariant(
                 this.count > -1 &
                 this.count <= this.items.Length);
-            for (int index = 0; index < this.count; ++index)
-            {
-                var left = 2 * index + 1;
-                GraphContracts.Assert(left >= count || this.Less(index, left));
-                var right = 2 * index + 2;
-                GraphContracts.Assert(right >= count || this.Less(index, right));
-            }
+            Contract.Invariant(
+                EnumerableContract.All(0, this.count, index =>
+                {
+                    var left = 2 * index + 1;
+                    var right = 2 * index + 2;
+                    return  (left >= count || this.Less(index, left)) &&
+                            (right >= count || this.Less(index, right));
+                })
+            );
         }
+#endif
 
         #region IEnumerable<KeyValuePair<TKey,TValue>> Members
         public IEnumerator<KeyValuePair<TPriority, TValue>> GetEnumerator()
@@ -225,7 +259,7 @@ namespace QuickGraph.Collections
             return new Enumerator(this);
         }
 
-        struct Enumerator :
+		class Enumerator :
             IEnumerator<KeyValuePair<TPriority, TValue>>
         {
             BinaryHeap<TPriority, TValue> owner;
@@ -251,7 +285,7 @@ namespace QuickGraph.Collections
                         throw new InvalidOperationException();
                     if (this.index < 0 | this.index == this.count)
                         throw new InvalidOperationException();
-                    GraphContracts.Assert(this.index <= this.count);
+                    Contract.Assert(this.index <= this.count);
                     return this.items[this.index];
                 }
             }
@@ -287,5 +321,6 @@ namespace QuickGraph.Collections
             return this.GetEnumerator();
         }
         #endregion
+
     }
 }

@@ -3,29 +3,22 @@ using QuickGraph.Algorithms.Services;
 
 namespace QuickGraph.Algorithms.MaximumFlow
 {
-    public sealed class MultiSourceSinkGraphAugmentorAlgorithm<TVertex, TEdge> :
-        GraphAugmentorAlgorithmBase<TVertex, TEdge, IMutableBidirectionalGraph<TVertex, TEdge>>
+    public sealed class MultiSourceSinkGraphAugmentorAlgorithm<TVertex, TEdge> 
+        : GraphAugmentorAlgorithmBase<TVertex, TEdge, IMutableBidirectionalGraph<TVertex, TEdge>>
         where TEdge : IEdge<TVertex>
     {
-        public MultiSourceSinkGraphAugmentorAlgorithm(IMutableBidirectionalGraph<TVertex, TEdge> visitedGraph)
-            : this(visitedGraph,
-                FactoryCompiler.GetVertexFactory<TVertex>(),
-                FactoryCompiler.GetEdgeFactory<TVertex, TEdge>()
-                )
-        { }
-
         public MultiSourceSinkGraphAugmentorAlgorithm(
             IMutableBidirectionalGraph<TVertex, TEdge> visitedGraph,
-            IVertexFactory<TVertex> vertexFactory,
-            IEdgeFactory<TVertex,TEdge> edgeFactory)
+            VertexFactory<TVertex> vertexFactory,
+            EdgeFactory<TVertex,TEdge> edgeFactory)
             :this(null, visitedGraph, vertexFactory, edgeFactory)
         {}
 
         public MultiSourceSinkGraphAugmentorAlgorithm(
             IAlgorithmComponent host,
             IMutableBidirectionalGraph<TVertex, TEdge> visitedGraph,
-            IVertexFactory<TVertex> vertexFactory,
-            IEdgeFactory<TVertex,TEdge> edgeFactory)
+            VertexFactory<TVertex> vertexFactory,
+            EdgeFactory<TVertex,TEdge> edgeFactory)
             :base(host, visitedGraph,vertexFactory,edgeFactory)
         {}
 

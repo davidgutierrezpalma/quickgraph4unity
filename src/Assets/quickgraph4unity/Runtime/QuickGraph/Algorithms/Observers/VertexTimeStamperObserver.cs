@@ -1,39 +1,50 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Observers
 {
     /// <summary>
     /// 
     /// </summary>
-    /// <typeparam name="Vertex"></typeparam>
-    /// <typeparam name="Edge"></typeparam>
+    /// <typeparam name="TVertex">type of a vertex</typeparam>
+    /// <typeparam name="TEdge">type of an edge</typeparam>
     /// <reference-ref
     ///     idref="boost"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class VertexTimeStamperObserver<TVertex, TEdge> :
         IObserver<IVertexTimeStamperAlgorithm<TVertex, TEdge>>
         where TEdge : IEdge<TVertex>
     {
-        private IDictionary<TVertex, int> discoverTimes;
-        private IDictionary<TVertex, int> finishTimes;
+        private readonly Dictionary<TVertex, int> discoverTimes;
+        private readonly Dictionary<TVertex, int> _finishTimes;
         private int currentTime = 0;
+
 
         public VertexTimeStamperObserver()
             :this(new Dictionary<TVertex,int>(), new Dictionary<TVertex,int>())
         {}
 
-        public VertexTimeStamperObserver(
-            IDictionary<TVertex, int> discoverTimes,
-            IDictionary<TVertex, int> finishTimes)
+        public VertexTimeStamperObserver(Dictionary<TVertex, int> discoverTimes)
         {
-            if (discoverTimes == null)
-                throw new ArgumentNullException("discoverTimes");
-            if (finishTimes == null)
-                throw new ArgumentNullException("finishTimes");
+            Contract.Requires(discoverTimes != null);
+
             this.discoverTimes = discoverTimes;
-            this.finishTimes = finishTimes;
+            this._finishTimes = null;
+        }
+
+        public VertexTimeStamperObserver(
+            Dictionary<TVertex, int> discoverTimes,
+            Dictionary<TVertex, int> finishTimes)
+        {
+            Contract.Requires(discoverTimes != null);
+            Contract.Requires(finishTimes != null);
+
+            this.discoverTimes = discoverTimes;
+            this._finishTimes = finishTimes;
         }
 
         public IDictionary<TVertex, int> DiscoverTimes
@@ -43,29 +54,32 @@ namespace QuickGraph.Algorithms.Observers
 
         public IDictionary<TVertex, int> FinishTimes
         {
-            get { return this.finishTimes; }
+            get { return this._finishTimes; }
         }
 
-        public void Attach(IVertexTimeStamperAlgorithm<TVertex, TEdge> algorithm)
+        public IDisposable Attach(IVertexTimeStamperAlgorithm<TVertex, TEdge> algorithm)
         {
-            algorithm.DiscoverVertex+=new VertexEventHandler<TVertex>(DiscoverVertex);
-            algorithm.FinishVertex+=new VertexEventHandler<TVertex>(FinishVertex);
+            algorithm.DiscoverVertex+=new VertexAction<TVertex>(DiscoverVertex);
+            if (this._finishTimes != null)
+                algorithm.FinishVertex+=new VertexAction<TVertex>(FinishVertex);
+
+            return new DisposableAction(
+                () =>
+                {
+                    algorithm.DiscoverVertex -= new VertexAction<TVertex>(DiscoverVertex);
+                    if (this._finishTimes != null)
+                        algorithm.FinishVertex -= new VertexAction<TVertex>(FinishVertex);
+                });
         }
 
-        public void Detach(IVertexTimeStamperAlgorithm<TVertex, TEdge> algorithm)
+        void DiscoverVertex(TVertex v)
         {
-            algorithm.DiscoverVertex -= new VertexEventHandler<TVertex>(DiscoverVertex);
-            algorithm.FinishVertex -= new VertexEventHandler<TVertex>(FinishVertex);
+            this.discoverTimes[v] = this.currentTime++;
         }
 
-        void DiscoverVertex(Object sender, VertexEventArgs<TVertex> e)
+        void FinishVertex(TVertex v)
         {
-            this.discoverTimes[e.Vertex] = this.currentTime++;
-        }
-
-        void FinishVertex(Object sender, VertexEventArgs<TVertex> e)
-        {
-            this.finishTimes[e.Vertex] = this.currentTime++;
+            this._finishTimes[v] = this.currentTime++;
         }
     }
 }

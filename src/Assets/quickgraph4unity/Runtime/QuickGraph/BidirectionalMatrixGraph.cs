@@ -1,11 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.Contracts;
+using QuickGraph.Contracts;
 
 namespace QuickGraph
 {
-    public class BidirectionalMatrixGraph<TEdge> :
-        IBidirectionalGraph<int, TEdge>,
-        IMutableEdgeListGraph<int, TEdge>
+#if !SILVERLIGHT
+    [Serializable]
+#endif
+    [DebuggerDisplay("VertexCount = {VertexCount}, EdgeCount = {EdgeCount}")]
+    public class BidirectionalMatrixGraph<TEdge> 
+        : IBidirectionalGraph<int, TEdge>
+        , IMutableEdgeListGraph<int, TEdge>
+#if !SILVERLIGHT
+        , ICloneable
+#endif
         where TEdge : IEdge<int>
     {
         private readonly int vertexCount;
@@ -14,8 +24,8 @@ namespace QuickGraph
 
         public BidirectionalMatrixGraph(int vertexCount)        
         {
-            if (vertexCount < 1)
-                throw new ArgumentOutOfRangeException("vertexCount");
+            Contract.Requires(vertexCount > 0);
+
             this.vertexCount = vertexCount;
             this.edgeCount = 0;
             this.edges = new TEdge[vertexCount, vertexCount];
@@ -74,7 +84,7 @@ namespace QuickGraph
         #endregion
 
         #region IBidirectionalGraph<int,Edge> Members
-
+        [Pure]
         public bool IsInEdgesEmpty(int v)
         {
             for (int i = 0; i < this.VertexCount; ++i)
@@ -83,6 +93,7 @@ namespace QuickGraph
             return true;
         }
 
+        [Pure]
         public int InDegree(int v)
         {
             int count = 0;
@@ -92,6 +103,7 @@ namespace QuickGraph
             return count;
         }
 
+        [Pure]
         public IEnumerable<TEdge> InEdges(int v)
         {
             for (int i = 0; i < this.VertexCount; ++i)
@@ -102,6 +114,24 @@ namespace QuickGraph
             }
         }
 
+        [Pure]
+        public bool TryGetInEdges(int v, out IEnumerable<TEdge> edges)
+        {
+            Contract.Ensures(Contract.Result<bool>() == (0 <= 0 && v > this.VertexCount));
+            Contract.Ensures(
+                Contract.Result<bool>() == 
+                (Contract.ValueAtReturn<IEnumerable<TEdge>>(out edges) != null));
+
+            if (v > -1 && v < this.vertexCount)
+            {
+                edges = this.InEdges(v);
+                return true;
+            }
+            edges = null;
+            return false;
+        }
+
+        [Pure]
         public TEdge InEdge(int v, int index)
         {
             int count = 0;
@@ -118,6 +148,7 @@ namespace QuickGraph
             throw new ArgumentOutOfRangeException("index");
         }
 
+        [Pure]
         public int Degree(int v)
         {
             return this.InDegree(v) + this.OutDegree(v);
@@ -157,6 +188,7 @@ namespace QuickGraph
 
         #region IImplicitGraph<int,Edge> Members
 
+        [Pure]
         public bool IsOutEdgesEmpty(int v)
         {
             for (int j = 0; j < this.vertexCount; ++j)
@@ -165,6 +197,7 @@ namespace QuickGraph
             return true;
         }
 
+        [Pure]
         public int OutDegree(int v)
         {
             int count = 0;
@@ -174,6 +207,7 @@ namespace QuickGraph
             return count;
         }
 
+        [Pure]
         public IEnumerable<TEdge> OutEdges(int v)
         {
             for (int j = 0; j < this.vertexCount; ++j)
@@ -184,6 +218,19 @@ namespace QuickGraph
             }
         }
 
+        [Pure]
+        public bool TryGetOutEdges(int v, out IEnumerable<TEdge> edges)
+        {
+            if (v > -1 && v < this.vertexCount)
+            {
+                edges = this.OutEdges(v);
+                return true;
+            }
+            edges = null;
+            return false;
+        }
+
+        [Pure]
         public TEdge OutEdge(int v, int index)
         {
             int count = 0;
@@ -213,6 +260,7 @@ namespace QuickGraph
             }
         }
 
+        [Pure]
         public bool ContainsVertex(int vertex)
         {
             return vertex >= 0 && vertex < this.VertexCount;
@@ -221,7 +269,7 @@ namespace QuickGraph
         #endregion
 
         #region IEdgeListGraph<int,Edge> Members
-
+        [Pure]
         public bool ContainsEdge(TEdge edge)
         {
             TEdge e = this.edges[edge.Source, edge.Target];
@@ -235,6 +283,8 @@ namespace QuickGraph
 
         public int RemoveInEdgeIf(int v, EdgePredicate<int, TEdge> edgePredicate)
         {
+            Contract.Requires(0 <= v && v < this.VertexCount);
+
             int count = 0;
             for (int i = 0; i < this.VertexCount; ++i)
             {
@@ -250,6 +300,8 @@ namespace QuickGraph
 
         public void ClearInEdges(int v)
         {
+            Contract.Requires(0 <= v && v < this.VertexCount);
+
             for (int i = 0; i < this.VertexCount; ++i)
             {
                 TEdge e = this.edges[i, v];
@@ -260,6 +312,8 @@ namespace QuickGraph
 
         public void ClearEdges(int v)
         {
+            Contract.Requires(0 <= v && v < this.VertexCount);
+
             this.ClearInEdges(v);
             this.ClearOutEdges(v);
         }
@@ -270,6 +324,8 @@ namespace QuickGraph
 
         public int RemoveOutEdgeIf(int v, EdgePredicate<int, TEdge> predicate)
         {
+            Contract.Requires(0 <= v && v < this.VertexCount);
+
             int count = 0;
             for (int j = 0; j < this.VertexCount; ++j)
             {
@@ -285,6 +341,8 @@ namespace QuickGraph
 
         public void ClearOutEdges(int v)
         {
+            Contract.Requires(0 <= v && v < this.VertexCount);
+
             for (int j = 0; j < this.VertexCount; ++j)
             {
                 TEdge e = this.edges[v, j];
@@ -296,40 +354,50 @@ namespace QuickGraph
         #endregion
 
         #region IMutableGraph<int,Edge> Members
-
         public void Clear()
         {
-            throw new Exception("The method or operation is not implemented.");
+            for(int i = 0;i<this.vertexCount;++i)
+                for(int j = 0;j<this.vertexCount;++j)
+                    this.edges[i,j] = default(TEdge);
+            this.edgeCount = 0;
+            this.OnCleared(EventArgs.Empty);
         }
 
+        public event EventHandler Cleared;
+        private void OnCleared(EventArgs e)
+        {
+            var eh = this.Cleared;
+            if (eh != null)
+                eh(this, e);
+        }
         #endregion
 
         #region IMutableEdgeListGraph<int,Edge> Members
-
         public bool AddEdge(TEdge edge)
         {
-            GraphContracts.AssumeNotNull(edge, "edge");
             if (this.edges[edge.Source, edge.Target]!=null)
                 throw new ParallelEdgeNotAllowedException();
             this.edges[edge.Source,edge.Target] = edge;
             this.edgeCount++;
-            this.OnEdgeAdded(new EdgeEventArgs<int, TEdge>(edge));
+            this.OnEdgeAdded(edge);
             return true;
         }
 
-        public void AddEdgeRange(IEnumerable<TEdge> edges)
+        public int AddEdgeRange(IEnumerable<TEdge> edges)
         {
-            GraphContracts.AssumeNotNull(edges, "edges");
+            int count = 0;
             foreach (var edge in edges)
-                this.AddEdge(edge);
+                if (this.AddEdge(edge))
+                    count++;
+            return count;
         }
 
-        public event EdgeEventHandler<int, TEdge> EdgeAdded;
-        protected virtual void OnEdgeAdded(EdgeEventArgs<int, TEdge> args)
+        public event EdgeAction<int, TEdge> EdgeAdded;
+        protected virtual void OnEdgeAdded(TEdge args)
         {
-            EdgeEventHandler<int, TEdge> eh = this.EdgeAdded;
+            var eh = this.EdgeAdded;
             if (eh != null)
-                eh(this, args);
+                eh(args);
         }
 
         public bool RemoveEdge(TEdge edge)
@@ -339,19 +407,19 @@ namespace QuickGraph
             if (!e.Equals(default(TEdge)))
             {
                 this.edgeCount--;
-                this.OnEdgeRemoved(new EdgeEventArgs<int, TEdge>(edge));
+                this.OnEdgeRemoved(edge);
                 return true;
             }
             else
                 return false;
         }
 
-        public event EdgeEventHandler<int, TEdge> EdgeRemoved;
-        protected virtual void OnEdgeRemoved(EdgeEventArgs<int, TEdge> args)
+        public event EdgeAction<int, TEdge> EdgeRemoved;
+        protected virtual void OnEdgeRemoved(TEdge args)
         {
-            EdgeEventHandler<int, TEdge> eh = this.EdgeRemoved;
+            var eh = this.EdgeRemoved;
             if (eh != null)
-                eh(this, args);
+                eh(args);
         }
 
         public int RemoveEdgeIf(EdgePredicate<int, TEdge> predicate)
@@ -359,5 +427,41 @@ namespace QuickGraph
             throw new NotImplementedException();
         }
         #endregion
-}
+
+        #region ICloneable Members
+        private BidirectionalMatrixGraph(
+            int vertexCount,
+            int edgeCount,
+            TEdge[,] edges)
+        {
+            Contract.Requires(vertexCount > 0);
+            Contract.Requires(edgeCount >= 0);
+            Contract.Requires(edges != null);
+            Contract.Requires(vertexCount == edges.GetLength(0));
+            Contract.Requires(vertexCount == edges.GetLength(1));
+
+            this.vertexCount = vertexCount;
+            this.edgeCount = edgeCount;
+            this.edges = edges;
+        }
+
+#if !SILVERLIGHT
+        public BidirectionalMatrixGraph<TEdge> Clone()
+        {
+            return new BidirectionalMatrixGraph<TEdge>(
+                this.vertexCount,
+                this.edgeCount,
+                (TEdge[,])this.edges.Clone()
+                );
+        }
+        
+#endif
+#if !SILVERLIGHT
+        object ICloneable.Clone()
+        {
+            return this.Clone();
+        }
+#endif
+        #endregion
+    }
 }

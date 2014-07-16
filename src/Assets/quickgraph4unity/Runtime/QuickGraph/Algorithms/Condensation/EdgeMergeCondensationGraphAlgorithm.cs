@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Condensation
 {
@@ -7,31 +8,23 @@ namespace QuickGraph.Algorithms.Condensation
         AlgorithmBase<IBidirectionalGraph<TVertex, TEdge>>
         where TEdge : IEdge<TVertex>
     {
-        private IMutableBidirectionalGraph<
-            TVertex, 
-            MergedEdge<TVertex,TEdge>
-            > condensatedGraph;
+
+        private IMutableBidirectionalGraph<TVertex, MergedEdge<TVertex,TEdge>> condensatedGraph;
         private VertexPredicate<TVertex> vertexPredicate;
 
         public EdgeMergeCondensationGraphAlgorithm(
-                IBidirectionalGraph<TVertex, TEdge> visitedGraph,
-                IMutableBidirectionalGraph<TVertex, MergedEdge<TVertex,TEdge>> condensatedGraph,
-                VertexPredicate<TVertex> vertexPredicate
-            )
-            :base(visitedGraph)
-        {
-            if (condensatedGraph == null)
-                throw new ArgumentNullException("condensatedGraph");
-            if (vertexPredicate == null)
-                throw new ArgumentNullException("vertexPredicate");
+            IBidirectionalGraph<TVertex, TEdge> visitedGraph,
+            IMutableBidirectionalGraph<TVertex, MergedEdge<TVertex,TEdge>> condensatedGraph,
+            VertexPredicate<TVertex> vertexPredicate
+        ) : base(visitedGraph){
+            Contract.Requires(condensatedGraph != null);
+            Contract.Requires(vertexPredicate != null);
 
             this.condensatedGraph = condensatedGraph;
             this.vertexPredicate = vertexPredicate;
         }
 
-        public IMutableBidirectionalGraph<TVertex,
-            MergedEdge<TVertex,TEdge>
-            > CondensatedGraph
+        public IMutableBidirectionalGraph<TVertex, MergedEdge<TVertex,TEdge>> CondensatedGraph
         {
             get { return this.condensatedGraph; }
         }

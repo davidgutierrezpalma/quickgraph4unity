@@ -1,34 +1,37 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Observers
 {
     /// <summary>
     /// 
     /// </summary>
-    /// <typeparam name="Vertex"></typeparam>
-    /// <typeparam name="Edge"></typeparam>
+    /// <typeparam name="TVertex">type of a vertex</typeparam>
+    /// <typeparam name="TEdge">type of an edge</typeparam>
     /// <reference-ref
     ///     idref="boost"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class VertexRecorderObserver<TVertex, TEdge> :
         IObserver<IVertexTimeStamperAlgorithm<TVertex, TEdge>>
         where TEdge : IEdge<TVertex>
     {
-        private IList<TVertex> vertices;
+        private readonly IList<TVertex> vertices;
         public VertexRecorderObserver()
             : this(new List<TVertex>())
         { }
 
         public VertexRecorderObserver(IList<TVertex> vertices)
         {
-            if (vertices == null)
-                throw new ArgumentNullException("edges");
+            Contract.Requires(vertices != null);
+
             this.vertices = vertices;
         }
 
-        public IList<TVertex> Vertices
+        public IEnumerable<TVertex> Vertices
         {
             get
             {
@@ -36,19 +39,17 @@ namespace QuickGraph.Algorithms.Observers
             }
         }
 
-        public void Attach(IVertexTimeStamperAlgorithm<TVertex, TEdge> algorithm)
+        public IDisposable Attach(IVertexTimeStamperAlgorithm<TVertex, TEdge> algorithm)
         {
-            algorithm.DiscoverVertex += new VertexEventHandler<TVertex>(algorithm_DiscoverVertex);
+            algorithm.DiscoverVertex += new VertexAction<TVertex>(algorithm_DiscoverVertex);
+            return new DisposableAction(
+                () => algorithm.DiscoverVertex -= new VertexAction<TVertex>(algorithm_DiscoverVertex)
+                );
         }
 
-        public void Detach(IVertexTimeStamperAlgorithm<TVertex, TEdge> algorithm)
+        void algorithm_DiscoverVertex(TVertex v)
         {
-            algorithm.DiscoverVertex -= new VertexEventHandler<TVertex>(algorithm_DiscoverVertex);
-        }
-
-        void algorithm_DiscoverVertex(object sender, VertexEventArgs<TVertex> e)
-        {
-            this.Vertices.Add(e.Vertex);
+            this.vertices.Add(v);
         }
     }
 }

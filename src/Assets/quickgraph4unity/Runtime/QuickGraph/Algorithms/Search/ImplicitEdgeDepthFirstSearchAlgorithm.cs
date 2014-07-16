@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.Search
 {
@@ -15,8 +16,10 @@ namespace QuickGraph.Algorithms.Search
     ///     idref="gross98graphtheory"
     ///     chapter="4.2"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
-    public sealed class ImplicitEdgeDepthFirstSearchAlgorithm<TVertex,TEdge> :
+#endif
+    public sealed class ImplicitEdgeDepthFirstSearchAlgorithm<TVertex, TEdge> :
         RootedAlgorithmBase<TVertex,IIncidenceGraph<TVertex,TEdge>>,
         ITreeBuilderAlgorithm<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
@@ -35,7 +38,6 @@ namespace QuickGraph.Algorithms.Search
             :base(host, visitedGraph)
         {}
 
-        /// <summary>
         /// <summary>
         /// Gets the vertex color map
         /// </summary>
@@ -76,7 +78,7 @@ namespace QuickGraph.Algorithms.Search
         /// <summary>
         /// Invoked on the source vertex once before the start of the search. 
         /// </summary>
-        public event VertexEventHandler<TVertex> StartVertex;
+        public event VertexAction<TVertex> StartVertex;
 
         /// <summary>
         /// Triggers the StartVertex event.
@@ -85,13 +87,13 @@ namespace QuickGraph.Algorithms.Search
         private void OnStartVertex(TVertex v)
         {
             if (this.StartVertex != null)
-                StartVertex(this, new VertexEventArgs<TVertex>(v));
+                StartVertex(v);
         }
 
         /// <summary>
         /// Invoked on the first edge of a test case
         /// </summary>
-        public event EdgeEventHandler<TVertex,TEdge> StartEdge;
+        public event EdgeAction<TVertex,TEdge> StartEdge;
 
         /// <summary>
         /// Triggers the StartEdge event.
@@ -100,13 +102,13 @@ namespace QuickGraph.Algorithms.Search
         private void OnStartEdge(TEdge e)
         {
             if (this.StartEdge != null)
-                StartEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                StartEdge(e);
         }
 
         /// <summary>
         /// 
         /// </summary>
-        public event EdgeEdgeEventHandler<TVertex, TEdge> DiscoverTreeEdge;
+        public event EdgeEdgeAction<TVertex, TEdge> DiscoverTreeEdge;
 
         /// <summary>
         /// Triggers DiscoverEdge event
@@ -115,8 +117,9 @@ namespace QuickGraph.Algorithms.Search
         /// <param name="e"></param>
         private void OnDiscoverTreeEdge(TEdge se, TEdge e)
         {
-            if (DiscoverTreeEdge != null)
-                DiscoverTreeEdge(this, new EdgeEdgeEventArgs<TVertex, TEdge>(se, e));
+            var eh = this.DiscoverTreeEdge;
+            if (eh != null)
+                eh(se, e);
         }
 
         /// <summary>
@@ -124,7 +127,7 @@ namespace QuickGraph.Algorithms.Search
         /// the search tree. If you wish to record predecessors, do so at this 
         /// event point. 
         /// </summary>
-        public event EdgeEventHandler<TVertex, TEdge> TreeEdge;
+        public event EdgeAction<TVertex, TEdge> TreeEdge;
 
         /// <summary>
         /// Triggers the TreeEdge event.
@@ -133,13 +136,13 @@ namespace QuickGraph.Algorithms.Search
         private void OnTreeEdge(TEdge e)
         {
             if (TreeEdge != null)
-                TreeEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                TreeEdge(e);
         }
 
         /// <summary>
         /// Invoked on the back edges in the graph. 
         /// </summary>
-        public event EdgeEventHandler<TVertex, TEdge> BackEdge;
+        public event EdgeAction<TVertex, TEdge> BackEdge;
 
         /// <summary>
         /// Triggers the BackEdge event.
@@ -148,14 +151,14 @@ namespace QuickGraph.Algorithms.Search
         private void OnBackEdge(TEdge e)
         {
             if (BackEdge != null)
-                BackEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                BackEdge(e);
         }
 
         /// <summary>
         /// Invoked on forward or cross edges in the graph. 
         /// (In an undirected graph this method is never called.) 
         /// </summary>
-        public event EdgeEventHandler<TVertex, TEdge> ForwardOrCrossEdge;
+        public event EdgeAction<TVertex, TEdge> ForwardOrCrossEdge;
 
         /// <summary>
         /// Triggers the ForwardOrCrossEdge event.
@@ -164,7 +167,7 @@ namespace QuickGraph.Algorithms.Search
         private void OnForwardOrCrossEdge(TEdge e)
         {
             if (this.ForwardOrCrossEdge != null)
-                ForwardOrCrossEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                ForwardOrCrossEdge(e);
         }
 
         /// <summary>
@@ -172,7 +175,7 @@ namespace QuickGraph.Algorithms.Search
         /// the search tree and all of the adjacent vertices have been 
         /// discovered (but before their out-edges have been examined). 
         /// </summary>
-        public event EdgeEventHandler<TVertex, TEdge> FinishEdge;
+        public event EdgeAction<TVertex, TEdge> FinishEdge;
 
         /// <summary>
         /// Triggers the ForwardOrCrossEdge event.
@@ -181,7 +184,7 @@ namespace QuickGraph.Algorithms.Search
         private void OnFinishEdge(TEdge e)
         {
             if (this.FinishEdge != null)
-                FinishEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                FinishEdge(e);
         }
 
         
@@ -190,7 +193,7 @@ namespace QuickGraph.Algorithms.Search
         {
             TVertex rootVertex;
             if (!this.TryGetRootVertex(out rootVertex))
-                throw new RootVertexNotSpecifiedException();
+                throw new InvalidOperationException("root vertex not set");
 
             // initialize algorithm
             this.Initialize();
@@ -219,8 +222,10 @@ namespace QuickGraph.Algorithms.Search
         /// <param name="depth">current exploration depth</param>
         /// <exception cref="ArgumentNullException">se cannot be null</exception>
         private void Visit(TEdge se, int depth)
-        {
-            GraphContracts.AssumeNotNull(se, "se");
+        {            
+            Contract.Requires(se != null);
+            Contract.Requires(depth >= 0);
+
             if (depth > this.maxDepth)
                 return;
 
@@ -260,8 +265,10 @@ namespace QuickGraph.Algorithms.Search
         /// <summary>
         /// Initializes the algorithm before computation.
         /// </summary>
-        private void Initialize()
+        protected override void Initialize()
         {
+            base.Initialize();
+
             this.EdgeColors.Clear();
         }
    }

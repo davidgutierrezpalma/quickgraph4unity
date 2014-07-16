@@ -1,18 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms.MaximumFlow
 {
-    public abstract class GraphAugmentorAlgorithmBase<TVertex,TEdge,TGraph> :
-        AlgorithmBase<TGraph>
+    public abstract class GraphAugmentorAlgorithmBase<TVertex,TEdge,TGraph> 
+        : AlgorithmBase<TGraph>
+        , IDisposable
         where TEdge : IEdge<TVertex>
-        where TGraph : IMutableVertexAndEdgeListGraph<TVertex,TEdge>
+        where TGraph : IMutableVertexAndEdgeSet<TVertex, TEdge>
     {
         private bool augmented = false;
         private List<TEdge> augmentedEdges = new List<TEdge>();
-        private IVertexFactory<TVertex> vertexFactory;
-        private IEdgeFactory<TVertex, TEdge> edgeFactory;
+        private readonly VertexFactory<TVertex> vertexFactory;
+        private readonly EdgeFactory<TVertex, TEdge> edgeFactory;
 
         private TVertex superSource = default(TVertex);
         private TVertex superSink = default(TVertex);
@@ -20,26 +22,24 @@ namespace QuickGraph.Algorithms.MaximumFlow
         protected GraphAugmentorAlgorithmBase(
             IAlgorithmComponent host,
             TGraph visitedGraph,
-            IVertexFactory<TVertex> vertexFactory,
-            IEdgeFactory<TVertex,TEdge> edgeFactory
+            VertexFactory<TVertex> vertexFactory,
+            EdgeFactory<TVertex,TEdge> edgeFactory
             )
             :base(host, visitedGraph)
         {
-            if (vertexFactory == null)
-                throw new ArgumentNullException("vertexFactory");
-            if (edgeFactory == null)
-                throw new ArgumentNullException("edgeFactory");
+            Contract.Requires(vertexFactory != null);
+            Contract.Requires(edgeFactory != null);
 
             this.vertexFactory = vertexFactory;
             this.edgeFactory = edgeFactory;
         }
 
-        public IVertexFactory<TVertex> VertexFactory
+        public VertexFactory<TVertex> VertexFactory
         {
             get { return this.vertexFactory; }
         }
 
-        public IEdgeFactory<TVertex, TEdge> EdgeFactory
+        public EdgeFactory<TVertex, TEdge> EdgeFactory
         {
             get { return this.edgeFactory; }
         }
@@ -64,25 +64,31 @@ namespace QuickGraph.Algorithms.MaximumFlow
             get { return this.augmentedEdges; }
         }
 
-        public event VertexEventHandler<TVertex> SuperSourceAdded;
+        public event VertexAction<TVertex> SuperSourceAdded;
         private void OnSuperSourceAdded(TVertex v)
         {
-            if (this.SuperSourceAdded != null)
-                this.SuperSourceAdded(this, new VertexEventArgs<TVertex>(v));
+            Contract.Requires(v != null);
+            var eh = this.SuperSourceAdded;
+            if (eh != null)
+                eh(v);
         }
 
-        public event VertexEventHandler<TVertex> SuperSinkAdded;
+        public event VertexAction<TVertex> SuperSinkAdded;
         private void OnSuperSinkAdded(TVertex v)
         {
-            if (this.SuperSinkAdded != null)
-                this.SuperSinkAdded(this, new VertexEventArgs<TVertex>(v));
+            Contract.Requires(v != null);
+            var eh = this.SuperSinkAdded;
+            if (eh != null)
+                eh(v);
         }
 
-        public event EdgeEventHandler<TVertex, TEdge> EdgeAdded;
+        public event EdgeAction<TVertex, TEdge> EdgeAdded;
         private void OnEdgeAdded(TEdge e)
         {
-            if (this.EdgeAdded != null)
-                this.EdgeAdded(this, new EdgeEventArgs<TVertex, TEdge>(e));
+            Contract.Requires(e != null);
+            var eh = this.EdgeAdded;
+            if (eh != null)
+                eh(e);
         }
 
 
@@ -91,11 +97,11 @@ namespace QuickGraph.Algorithms.MaximumFlow
             if (this.Augmented)
                 throw new InvalidOperationException("Graph already augmented");
 
-            this.superSource = this.VertexFactory.CreateVertex();
+            this.superSource = this.VertexFactory();
             this.VisitedGraph.AddVertex(this.superSource);
             this.OnSuperSourceAdded(this.SuperSource);
 
-            this.superSink = this.VertexFactory.CreateVertex();
+            this.superSink = this.VertexFactory();
             this.VisitedGraph.AddVertex(this.superSink);
             this.OnSuperSinkAdded(this.SuperSink);
 
@@ -108,19 +114,24 @@ namespace QuickGraph.Algorithms.MaximumFlow
             if (!this.Augmented)
                 return;
 
+            this.augmented = false;
             this.VisitedGraph.RemoveVertex(this.SuperSource);
             this.VisitedGraph.RemoveVertex(this.SuperSink);
             this.superSource = default(TVertex);
             this.superSink = default(TVertex);
             this.augmentedEdges.Clear();
-            this.augmented = false;
+        }
+
+        public void Dispose()
+        {
+            this.Rollback();
         }
 
         protected abstract void AugmentGraph();
 
         protected void AddAugmentedEdge(TVertex source, TVertex target)
         {
-            TEdge edge = this.EdgeFactory.CreateEdge(source, target);
+            TEdge edge = this.EdgeFactory(source, target);
             this.augmentedEdges.Add(edge);
             this.VisitedGraph.AddEdge(edge);
             this.OnEdgeAdded(edge);

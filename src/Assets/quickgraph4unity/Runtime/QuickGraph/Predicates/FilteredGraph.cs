@@ -1,15 +1,18 @@
 ﻿using System;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Predicates
 {
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public class FilteredGraph<TVertex, TEdge, TGraph> : IGraph<TVertex, TEdge>
         where TEdge : IEdge<TVertex>
         where TGraph : IGraph<TVertex,TEdge>
     {
-        private TGraph baseGraph;
-        private EdgePredicate<TVertex,TEdge> edgePredicate;
-        private VertexPredicate<TVertex> vertexPredicate;
+        private readonly TGraph baseGraph;
+        private readonly EdgePredicate<TVertex,TEdge> edgePredicate;
+        private readonly VertexPredicate<TVertex> vertexPredicate;
 
         public FilteredGraph(
             TGraph baseGraph,
@@ -17,12 +20,10 @@ namespace QuickGraph.Predicates
             EdgePredicate<TVertex, TEdge> edgePredicate
             )
         {
-            if (baseGraph == null)
-                throw new ArgumentNullException("baseGraph");
-           if (vertexPredicate == null)
-                throw new ArgumentNullException("vertexPredicate");
-            if (edgePredicate == null)
-                throw new ArgumentNullException("edgePredicate");
+            Contract.Requires(baseGraph != null);
+            Contract.Requires(vertexPredicate != null);
+            Contract.Requires(edgePredicate != null);
+
             this.baseGraph = baseGraph;
             this.vertexPredicate = vertexPredicate;
             this.edgePredicate = edgePredicate;

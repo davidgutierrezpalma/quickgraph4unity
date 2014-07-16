@@ -4,37 +4,41 @@ using QuickGraph.Algorithms.Search;
 using QuickGraph.Algorithms.Observers;
 using QuickGraph.Collections;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
+using System.Diagnostics;
 
 namespace QuickGraph.Algorithms.ShortestPath
 {
     /// <summary>
-    /// A single-source shortest path algorithm for directed graph
+    /// Dijkstra single-source shortest path algorithm for directed graph
     /// with positive distance.
     /// </summary>
-    /// <typeparam name="Vertex"></typeparam>
-    /// <typeparam name="Edge"></typeparam>
+    /// <typeparam name="TVertex">type of a vertex</typeparam>
+    /// <typeparam name="TEdge">type of an edge</typeparam>
     /// <reference-ref
     ///     idref="lawler01combinatorial"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
-    public sealed class DijkstraShortestPathAlgorithm<TVertex, TEdge> :
-        ShortestPathAlgorithmBase<TVertex,TEdge,IVertexListGraph<TVertex,TEdge>>,
-        IVertexColorizerAlgorithm<TVertex,TEdge>,
-        IVertexPredecessorRecorderAlgorithm<TVertex, TEdge>,
-        IDistanceRecorderAlgorithm<TVertex, TEdge>
+#endif
+    public sealed class DijkstraShortestPathAlgorithm<TVertex, TEdge> 
+        : ShortestPathAlgorithmBase<TVertex,TEdge,IVertexListGraph<TVertex,TEdge>>
+        , IVertexColorizerAlgorithm<TVertex,TEdge>
+        , IVertexPredecessorRecorderAlgorithm<TVertex, TEdge>
+        , IDistanceRecorderAlgorithm<TVertex, TEdge>
         where TEdge : IEdge<TVertex>
     {
-        private PriorityQueue<TVertex,double> vertexQueue;
+        private FibonacciQueue<TVertex,double> vertexQueue;        
 
         public DijkstraShortestPathAlgorithm(
             IVertexListGraph<TVertex, TEdge> visitedGraph,
-            IDictionary<TEdge, double> weights)
-            : this(visitedGraph, weights, new ShortestDistanceRelaxer())
+            Func<TEdge, double> weights)
+            : this(visitedGraph, weights, DistanceRelaxers.ShortestDistance)
         { }
 
         public DijkstraShortestPathAlgorithm(
             IVertexListGraph<TVertex, TEdge> visitedGraph,
-            IDictionary<TEdge, double> weights,
+            Func<TEdge, double> weights,
             IDistanceRelaxer distanceRelaxer
             )
             : this(null, visitedGraph, weights, distanceRelaxer)
@@ -43,59 +47,64 @@ namespace QuickGraph.Algorithms.ShortestPath
         public DijkstraShortestPathAlgorithm(
             IAlgorithmComponent host,
             IVertexListGraph<TVertex, TEdge> visitedGraph,
-            IDictionary<TEdge, double> weights,
+            Func<TEdge, double> weights,
             IDistanceRelaxer distanceRelaxer
             )
             :base(host, visitedGraph,weights, distanceRelaxer)
-        { }
+        {}
 
-        public event VertexEventHandler<TVertex> InitializeVertex;
-        public event VertexEventHandler<TVertex> DiscoverVertex;
-        public event VertexEventHandler<TVertex> StartVertex;
-        public event VertexEventHandler<TVertex> ExamineVertex;
-        public event EdgeEventHandler<TVertex, TEdge> ExamineEdge;
-        public event VertexEventHandler<TVertex> FinishVertex;
+        public event VertexAction<TVertex> InitializeVertex;
+        public event VertexAction<TVertex> DiscoverVertex;
+        public event VertexAction<TVertex> StartVertex;
+        public event VertexAction<TVertex> ExamineVertex;
+        public event EdgeAction<TVertex, TEdge> ExamineEdge;
+        public event VertexAction<TVertex> FinishVertex;
 
-        public event EdgeEventHandler<TVertex, TEdge> TreeEdge;
-        private void OnTreeEdge(TEdge e)
-        {
-            if (TreeEdge != null)
-                TreeEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
-        }
-        public event EdgeEventHandler<TVertex,TEdge> EdgeNotRelaxed;
+        public event EdgeAction<TVertex,TEdge> EdgeNotRelaxed;
         private void OnEdgeNotRelaxed(TEdge e)
         {
-            if (EdgeNotRelaxed != null)
-                EdgeNotRelaxed(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.EdgeNotRelaxed;
+            if (eh != null)
+                eh(e);
         }
 
-        private void InternalExamineEdge(Object sender, EdgeEventArgs<TVertex,TEdge> args)
+        private void InternalExamineEdge(TEdge args)
         {
-            bool decreased = Relax(args.Edge);
-            if (decreased)
-                OnTreeEdge(args.Edge);
-            else
-                OnEdgeNotRelaxed(args.Edge);
+            if (this.Weights(args) < 0)
+                throw new NegativeWeightException();
         }
 
-        private void InternalGrayTarget(Object sender, EdgeEventArgs<TVertex, TEdge> args)
+        private void InternalTreeEdge(TEdge args)
         {
-            bool decreased = Relax(args.Edge);
+            bool decreased = this.Relax(args);
             if (decreased)
             {
-                this.vertexQueue.Update(args.Edge.Target);
-                OnTreeEdge(args.Edge);
+                this.OnTreeEdge(args);
+                this.AssertHeap();
+            }
+            else
+                this.OnEdgeNotRelaxed(args);
+        }
+
+        private void InternalGrayTarget(TEdge edge)
+        {
+            bool decreased = this.Relax(edge);
+            if (decreased)
+            {
+                this.vertexQueue.Update(edge.Target);
+                this.AssertHeap();
+                this.OnTreeEdge(edge);
             }
             else
             {
-                OnEdgeNotRelaxed(args.Edge);
+                this.OnEdgeNotRelaxed(edge);
             }
         }
 
-        public void Initialize()
+        protected override void Initialize()
         {
-            this.VertexColors.Clear();
-            this.Distances.Clear();
+            base.Initialize();
+
             // init color, distance
             var initialDistance = this.DistanceRelaxer.InitialDistance;
             foreach (var u in VisitedGraph.Vertices)
@@ -103,24 +112,46 @@ namespace QuickGraph.Algorithms.ShortestPath
                 this.VertexColors.Add(u, GraphColor.White);
                 this.Distances.Add(u, initialDistance);
             }
+            this.vertexQueue = new FibonacciQueue<TVertex, double>(this.DistancesIndexGetter());
         }
         
         protected override void  InternalCompute()
         {
             TVertex rootVertex;
-            if (!this.TryGetRootVertex(out rootVertex))
-                throw new InvalidOperationException("RootVertex not initialized");
+            if (this.TryGetRootVertex(out rootVertex))
+                this.ComputeFromRoot(rootVertex);
+            else
+            {
+                foreach (var v in this.VisitedGraph.Vertices)
+                    if (this.VertexColors[v] == GraphColor.White)
+                        this.ComputeFromRoot(v);
+            }
+        }
 
-            this.Initialize();
+        private void ComputeFromRoot(TVertex rootVertex)
+        {
+            Contract.Requires(rootVertex != null);
+            Contract.Requires(this.VisitedGraph.ContainsVertex(rootVertex));
+            Contract.Requires(this.VertexColors[rootVertex] == GraphColor.White);
+
             this.VertexColors[rootVertex] = GraphColor.Gray;
             this.Distances[rootVertex] = 0;
-            ComputeNoInit(rootVertex);
+            this.ComputeNoInit(rootVertex);
+        }
+
+        [Conditional("DEBUG")]
+        private void AssertHeap()
+        {
+            if (this.vertexQueue.Count == 0) return;
+            var top = this.vertexQueue.Peek();
+            var vertices = this.vertexQueue.ToArray();
+            for (int i = 1; i < vertices.Length; ++i)
+                if (this.Distances[top] > this.Distances[vertices[i]])
+                    Contract.Assert(false);
         }
 
         public void ComputeNoInit(TVertex s)
         {
-            this.vertexQueue = new PriorityQueue<TVertex,double>(this.Distances);
-
             BreadthFirstSearchAlgorithm<TVertex, TEdge> bfs = null;
 
             try
@@ -136,11 +167,15 @@ namespace QuickGraph.Algorithms.ShortestPath
                 bfs.DiscoverVertex += this.DiscoverVertex;
                 bfs.StartVertex += this.StartVertex;
                 bfs.ExamineEdge += this.ExamineEdge;
+#if SUPERDEBUG
+                bfs.ExamineEdge += e => this.AssertHeap();
+#endif
                 bfs.ExamineVertex += this.ExamineVertex;
                 bfs.FinishVertex += this.FinishVertex;
 
-                bfs.ExamineEdge += new EdgeEventHandler<TVertex,TEdge>(this.InternalExamineEdge);
-                bfs.GrayTarget += new EdgeEventHandler<TVertex, TEdge>(this.InternalGrayTarget);
+                bfs.ExamineEdge += new EdgeAction<TVertex,TEdge>(this.InternalExamineEdge);
+                bfs.TreeEdge += new EdgeAction<TVertex,TEdge>(this.InternalTreeEdge);
+                bfs.GrayTarget += new EdgeAction<TVertex, TEdge>(this.InternalGrayTarget);
 
                 bfs.Visit(s);
             }
@@ -155,26 +190,11 @@ namespace QuickGraph.Algorithms.ShortestPath
                     bfs.ExamineVertex -= this.ExamineVertex;
                     bfs.FinishVertex -= this.FinishVertex;
 
-                    bfs.ExamineEdge -= new EdgeEventHandler<TVertex, TEdge>(this.InternalExamineEdge);
-                    bfs.GrayTarget -= new EdgeEventHandler<TVertex, TEdge>(this.InternalGrayTarget);
+                    bfs.ExamineEdge -= new EdgeAction<TVertex, TEdge>(this.InternalExamineEdge);
+                    bfs.TreeEdge -= new EdgeAction<TVertex, TEdge>(this.InternalTreeEdge);
+                    bfs.GrayTarget -= new EdgeAction<TVertex, TEdge>(this.InternalGrayTarget);
                 }
             }
-        }
-
-        private bool Relax(TEdge e)
-        {
-            double du = this.Distances[e.Source];
-            double dv = this.Distances[e.Target];
-            double we = this.Weights[e];
-
-            var duwe = Combine(du, we);
-            if (Compare(duwe, dv))
-            {
-                this.Distances[e.Target] = duwe;
-                return true;
-            }
-            else
-                return false;
         }
     }
 }

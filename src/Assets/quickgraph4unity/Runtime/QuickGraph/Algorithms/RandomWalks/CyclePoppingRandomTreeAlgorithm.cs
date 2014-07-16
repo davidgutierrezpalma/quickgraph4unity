@@ -1,16 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
+using System.Linq;
 
 namespace QuickGraph.Algorithms.RandomWalks
 {
     /// <summary>
     /// Wilson-Propp Cycle-Popping Algorithm for Random Tree Generation.
     /// </summary>
+#if !SILVERLIGHT
     [Serializable]
-    public sealed class CyclePoppingRandomTreeAlgorithm<TVertex, TEdge> :
-        RootedAlgorithmBase<TVertex,IVertexListGraph<TVertex,TEdge>>
-        where TEdge : IEdge<TVertex>
+#endif
+    public sealed class CyclePoppingRandomTreeAlgorithm<TVertex, TEdge> 
+        : RootedAlgorithmBase<TVertex,IVertexListGraph<TVertex,TEdge>>
+        , IVertexColorizerAlgorithm<TVertex, TEdge>
+        , ITreeBuilderAlgorithm<TVertex,TEdge>
+    where TEdge : IEdge<TVertex>
     {
         private IDictionary<TVertex, GraphColor> vertexColors = new Dictionary<TVertex, GraphColor>();
         private IMarkovEdgeChain<TVertex,TEdge> edgeChain = new NormalizedMarkovEdgeChain<TVertex,TEdge>();
@@ -35,8 +41,7 @@ namespace QuickGraph.Algorithms.RandomWalks
             )
             :base(host, visitedGraph)
         {
-            if (edgeChain == null)
-                throw new ArgumentNullException("edgeChain");
+            Contract.Requires(edgeChain != null);
             this.edgeChain = edgeChain;
         }
 
@@ -46,6 +51,11 @@ namespace QuickGraph.Algorithms.RandomWalks
             {
                 return this.vertexColors;
             }
+        }
+
+        public GraphColor GetVertexColor(TVertex v)
+        {
+            return this.vertexColors[v];
         }
 
         public IMarkovEdgeChain<TVertex,TEdge> EdgeChain
@@ -70,6 +80,7 @@ namespace QuickGraph.Algorithms.RandomWalks
             }
             set
             {
+                Contract.Requires(value != null);
                 this.rnd = value;
             }
         }
@@ -82,36 +93,42 @@ namespace QuickGraph.Algorithms.RandomWalks
             }
         }
 
-        public event VertexEventHandler<TVertex> InitializeVertex;
+        public event VertexAction<TVertex> InitializeVertex;
         private void OnInitializeVertex(TVertex v)
         {
-            if (this.InitializeVertex != null)
-                this.InitializeVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.InitializeVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public event VertexEventHandler<TVertex> FinishVertex;
+        public event VertexAction<TVertex> FinishVertex;
         private void OnFinishVertex(TVertex v)
         {
-            if (this.FinishVertex != null)
-                this.FinishVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.FinishVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> TreeEdge;
+        public event EdgeAction<TVertex,TEdge> TreeEdge;
         private void OnTreeEdge(TEdge e)
         {
-            if (this.TreeEdge != null)
-                this.TreeEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+            var eh = this.TreeEdge;
+            if (eh != null)
+                eh(e);
         }
 
-        public event VertexEventHandler<TVertex> ClearTreeVertex;
+        public event VertexAction<TVertex> ClearTreeVertex;
         private void OnClearTreeVertex(TVertex v)
         {
-            if (this.ClearTreeVertex != null)
-                this.ClearTreeVertex(this, new VertexEventArgs<TVertex>(v));
+            var eh = this.ClearTreeVertex;
+            if (eh != null)
+                eh(v);
         }
 
-        private void Initialize()
+        protected override void Initialize()
         {
+            base.Initialize();
+
             this.successors.Clear();
             this.vertexColors.Clear();
             foreach (var v in this.VisitedGraph.Vertices)
@@ -133,26 +150,32 @@ namespace QuickGraph.Algorithms.RandomWalks
             OnFinishVertex(u);
         }
 
-        private TEdge RandomSuccessor(TVertex u)
+        private bool TryGetSuccessor(Dictionary<TEdge, int> visited, TVertex u, out TEdge successor)
         {
-            return this.EdgeChain.Successor(this.VisitedGraph, u);
+            var outEdges = this.VisitedGraph.OutEdges(u);
+            var edges = Enumerable.Where(outEdges, e => !visited.ContainsKey(e));
+            return this.EdgeChain.TryGetSuccessor(edges, u, out successor);
         }
 
         private void Tree(TVertex u, TEdge next)
         {
+            Contract.Requires(next != null);
+
             this.successors[u] = next;
-            if (next == null)
-                return;
             OnTreeEdge(next);
         }
 
-        private TVertex NextInTree(TVertex u)
+        private bool TryGetNextInTree(TVertex u, out TVertex next)
         {
-            TEdge next = this.successors[u];
-            if (next == null)
-                return default(TVertex);
-            else
-                return next.Target;
+            TEdge nextEdge;
+            if (this.successors.TryGetValue(u, out nextEdge))
+            {
+                next = nextEdge.Target;
+                return true;
+            }
+
+            next = default(TVertex);
+            return false;
         }
 
         private bool Chance(double eps)
@@ -168,8 +191,9 @@ namespace QuickGraph.Algorithms.RandomWalks
 
         public void RandomTreeWithRoot(TVertex root)
         {
-            if (root == null)
-                throw new ArgumentNullException("root");
+            Contract.Requires(root != null);
+            Contract.Requires(this.VisitedGraph.ContainsVertex(root));
+
             this.SetRootVertex(root);
             this.Compute();
         }
@@ -179,41 +203,53 @@ namespace QuickGraph.Algorithms.RandomWalks
             TVertex rootVertex;
             if (!this.TryGetRootVertex(out rootVertex))
                 throw new InvalidOperationException("RootVertex not specified");
-            // initialize vertices to white
-            Initialize();
 
+            var cancelManager = this.Services.CancelManager;
             // process root
             ClearTree(rootVertex);
             SetInTree(rootVertex);
 
-            TVertex u;
             foreach (var i in this.VisitedGraph.Vertices)
             {
-                u = i;
-
+                if (cancelManager.IsCancelling) break;
                 // first pass exploring
-                while (u != null && NotInTree(u))
                 {
-                    Tree(u, RandomSuccessor(u));
-                    u = NextInTree(u);
+                    var visited = new Dictionary<TEdge, int>();
+                    TVertex u = i;
+                    TEdge successor;
+                    while (NotInTree(u) &&
+                           this.TryGetSuccessor(visited, u, out successor))
+                    {
+                        visited[successor] = 0;
+                        Tree(u, successor);
+                        if (!this.TryGetNextInTree(u, out u))
+                            break;
+                    }
                 }
 
                 // second pass, coloring
-                u = i;
-                while (u != null && NotInTree(u))
                 {
-                    SetInTree(u);
-                    u = NextInTree(u);
+                    TVertex u = i;
+                    while (NotInTree(u))
+                    {
+                        SetInTree(u);
+                        if (!this.TryGetNextInTree(u, out u))
+                            break;
+                    }
                 }
             }
         }
 
         public void RandomTree()
         {
+            var cancelManager = this.Services.CancelManager;
+
             double eps = 1;
             bool success;
             do
             {
+                if (cancelManager.IsCancelling) break;
+
                 eps /= 2;
                 success = Attempt(eps);
             } while (!success);
@@ -223,36 +259,48 @@ namespace QuickGraph.Algorithms.RandomWalks
         {
             Initialize();
             int numRoots = 0;
+            var cancelManager = this.Services.CancelManager;
 
-            TVertex u;
             foreach (var i in this.VisitedGraph.Vertices)
             {
-                u = i;
+                if (cancelManager.IsCancelling) break;
 
                 // first pass exploring
-                while (u != null && NotInTree(u))
                 {
-                    if (Chance(eps))
+                    var visited = new Dictionary<TEdge, int>();
+                    TEdge successor;
+                    var u = i;
+                    while (NotInTree(u))
                     {
-                        ClearTree(u);
-                        SetInTree(u);
-                        ++numRoots;
-                        if (numRoots > 1)
-                            return false;
-                    }
-                    else
-                    {
-                        Tree(u, RandomSuccessor(u));
-                        u = NextInTree(u);
+                        if (Chance(eps))
+                        {
+                            ClearTree(u);
+                            SetInTree(u);
+                            ++numRoots;
+                            if (numRoots > 1)
+                                return false;
+                        }
+                        else
+                        {
+                            if (!this.TryGetSuccessor(visited, u, out successor))
+                                break;
+                            visited[successor] = 0;
+                            Tree(u, successor);
+                            if (!this.TryGetNextInTree(u, out u))
+                                break;
+                        }
                     }
                 }
 
                 // second pass, coloring
-                u = i;
-                while (u != null && NotInTree(u))
                 {
-                    SetInTree(u);
-                    u = NextInTree(u);
+                    var u = i;
+                    while (NotInTree(u))
+                    {
+                        SetInTree(u);
+                        if (!this.TryGetNextInTree(u, out u))
+                            break;
+                    }
                 }
             }
             return true;

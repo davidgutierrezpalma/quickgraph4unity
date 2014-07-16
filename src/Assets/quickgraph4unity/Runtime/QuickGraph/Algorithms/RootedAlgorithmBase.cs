@@ -1,11 +1,15 @@
 ﻿using System;
 using QuickGraph.Algorithms.Services;
+using System.Diagnostics.Contracts;
+using System.Collections.Generic;
 
 namespace QuickGraph.Algorithms
 {
+#if !SILVERLIGHT
     [Serializable]
-    public abstract class RootedAlgorithmBase<TVertex,TGraph> : 
-        AlgorithmBase<TGraph>
+#endif
+    public abstract class RootedAlgorithmBase<TVertex,TGraph> 
+        : AlgorithmBase<TGraph>
     {
         private TVertex rootVertex;
         private bool hasRootVertex;
@@ -32,13 +36,12 @@ namespace QuickGraph.Algorithms
 
         public void SetRootVertex(TVertex rootVertex)
         {
-            GraphContracts.AssumeNotNull(rootVertex, "rootVertex");
-            // GraphContracts.AssumeInVertexSet(this.VisitedGraph, rootVertex, "rootVertex");
+            Contract.Requires(rootVertex != null);
 
-            bool changed = !Comparison<TVertex>.Equals(this.rootVertex, rootVertex);
+            bool changed = Comparer<TVertex>.Default.Compare(this.rootVertex, rootVertex) != 0;
             this.rootVertex = rootVertex;
             if (changed)
-                this.OnRooVertexChanged(EventArgs.Empty);
+                this.OnRootVertexChanged(EventArgs.Empty);
             this.hasRootVertex = true;
         }
 
@@ -49,16 +52,18 @@ namespace QuickGraph.Algorithms
         }
 
         public event EventHandler RootVertexChanged;
-        protected virtual void OnRooVertexChanged(EventArgs e)
+        protected virtual void OnRootVertexChanged(EventArgs e)
         {
-            if (this.RootVertexChanged != null)
-                this.RootVertexChanged(this, e);
+            Contract.Requires(e != null);
+
+            var eh = this.RootVertexChanged;
+            if (eh != null)
+                eh(this, e);
         }
 
         public void Compute(TVertex rootVertex)
         {
-            GraphContracts.AssumeNotNull(rootVertex, "rootVertex");
-            // GraphContracts.AssumeInVertexSet(this.VisitedGraph, rootVertex, "rootVertex");
+            Contract.Requires(rootVertex != null);
 
             this.SetRootVertex(rootVertex);
             this.Compute();

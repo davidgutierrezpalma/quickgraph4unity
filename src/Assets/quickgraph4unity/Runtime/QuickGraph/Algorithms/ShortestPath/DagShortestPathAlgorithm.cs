@@ -11,12 +11,14 @@ namespace QuickGraph.Algorithms.ShortestPath
     /// A single-source shortest path algorithm for directed acyclic
     /// graph.
     /// </summary>
-    /// <typeparam name="Vertex"></typeparam>
-    /// <typeparam name="Edge"></typeparam>
+    /// <typeparam name="TVertex">type of a vertex</typeparam>
+    /// <typeparam name="TEdge">type of an edge</typeparam>
     /// <reference-ref
     ///     id="boost"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class DagShortestPathAlgorithm<TVertex, TEdge> :
         ShortestPathAlgorithmBase<TVertex,TEdge,IVertexListGraph<TVertex,TEdge>>,
         IVertexColorizerAlgorithm<TVertex,TEdge>,
@@ -27,14 +29,14 @@ namespace QuickGraph.Algorithms.ShortestPath
     {
         public DagShortestPathAlgorithm(
             IVertexListGraph<TVertex, TEdge> g,
-            IDictionary<TEdge, double> weights
+            Func<TEdge, double> weights
             )
-            : this(g, weights, new ShortestDistanceRelaxer())
+            : this(g, weights, DistanceRelaxers.ShortestDistance)
         { }
 
         public DagShortestPathAlgorithm(
             IVertexListGraph<TVertex, TEdge> g,
-            IDictionary<TEdge, double> weights,
+            Func<TEdge, double> weights,
             IDistanceRelaxer distanceRelaxer
             )
             : this(null, g, weights, distanceRelaxer)
@@ -43,74 +45,65 @@ namespace QuickGraph.Algorithms.ShortestPath
         public DagShortestPathAlgorithm(
             IAlgorithmComponent host,
             IVertexListGraph<TVertex, TEdge> g,
-            IDictionary<TEdge,double> weights,
+            Func<TEdge,double> weights,
             IDistanceRelaxer distanceRelaxer
             )
             :base(host, g,weights, distanceRelaxer)
         {}
 
-        public event VertexEventHandler<TVertex> InitializeVertex;
+        public event VertexAction<TVertex> InitializeVertex;
         private void OnInitializeVertex(TVertex v)
         {
             if (InitializeVertex != null)
-                InitializeVertex(this, new VertexEventArgs<TVertex>(v));
+                InitializeVertex(v);
         }
 
-        public event VertexEventHandler<TVertex> StartVertex;
+        public event VertexAction<TVertex> StartVertex;
         private void OnStartVertex(TVertex v)
         {
-            VertexEventHandler<TVertex> eh = this.StartVertex;
+            var eh = this.StartVertex;
             if (eh!=null)
-                eh(this, new VertexEventArgs<TVertex>(v));
+                eh(v);
         }
 
-        public event VertexEventHandler<TVertex> DiscoverVertex;
+        public event VertexAction<TVertex> DiscoverVertex;
         private void OnDiscoverVertex(TVertex v)
         {
             if (DiscoverVertex != null)
-                DiscoverVertex(this, new VertexEventArgs<TVertex>(v));
+                DiscoverVertex(v);
         }
 
-        public event VertexEventHandler<TVertex> ExamineVertex;
+        public event VertexAction<TVertex> ExamineVertex;
         private void OnExamineVertex(TVertex v)
         {
             if (ExamineVertex != null)
-                ExamineVertex(this, new VertexEventArgs<TVertex>(v));
+                ExamineVertex(v);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> ExamineEdge;
+        public event EdgeAction<TVertex,TEdge> ExamineEdge;
         private void OnExamineEdge(TEdge e)
         {
             if (ExamineEdge != null)
-                ExamineEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
+                ExamineEdge(e);
         }
 
-        public event EdgeEventHandler<TVertex,TEdge> TreeEdge;
-        private void OnTreeEdge(TEdge e)
-        {
-            if (TreeEdge != null)
-                TreeEdge(this, new EdgeEventArgs<TVertex,TEdge>(e));
-        }
-
-        public event EdgeEventHandler<TVertex,TEdge> EdgeNotRelaxed;
+        public event EdgeAction<TVertex,TEdge> EdgeNotRelaxed;
         private void OnEdgeNotRelaxed(TEdge e)
         {
             if (EdgeNotRelaxed != null)
-                EdgeNotRelaxed(this, new EdgeEventArgs<TVertex,TEdge>(e));
+                EdgeNotRelaxed(e);
         }
 
-        public event VertexEventHandler<TVertex> FinishVertex;
+        public event VertexAction<TVertex> FinishVertex;
         private void OnFinishVertex(TVertex v)
         {
             if (FinishVertex != null)
-                FinishVertex(this, new VertexEventArgs<TVertex>(v));
+                FinishVertex(v);
         }
 
-        public void Initialize()
+        protected override void Initialize()
         {
-            this.VertexColors.Clear();
-            this.Distances.Clear();
-
+            base.Initialize();
             // init color, distance
             var initialDistance = this.DistanceRelaxer.InitialDistance;
             foreach (var u in VisitedGraph.Vertices)
@@ -127,7 +120,6 @@ namespace QuickGraph.Algorithms.ShortestPath
             if (!this.TryGetRootVertex(out rootVertex))
                 throw new InvalidOperationException("RootVertex not initialized");
 
-            this.Initialize();
             VertexColors[rootVertex] = GraphColor.Gray;
             Distances[rootVertex] = 0;
             ComputeNoInit(rootVertex);
@@ -135,7 +127,7 @@ namespace QuickGraph.Algorithms.ShortestPath
 
         public void ComputeNoInit(TVertex s)
         {
-            ICollection<TVertex> orderedVertices = AlgoUtility.TopologicalSort<TVertex, TEdge>(this.VisitedGraph);
+            var orderedVertices = AlgorithmExtensions.TopologicalSort(this.VisitedGraph);
 
             OnDiscoverVertex(s);
             foreach (var v in orderedVertices)
@@ -152,21 +144,6 @@ namespace QuickGraph.Algorithms.ShortestPath
                 }
                 OnFinishVertex(v);
             }
-        }
-
-        private bool Relax(TEdge e)
-        {
-            double du = this.Distances[e.Source];
-            double dv = this.Distances[e.Target];
-            double we = this.Weights[e];
-
-            if (Compare(Combine(du, we), dv))
-            {
-                Distances[e.Target] = Combine(du, we);
-                return true;
-            }
-            else
-                return false;
         }
     }
 }

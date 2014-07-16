@@ -1,22 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 namespace QuickGraph.Predicates
 {
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class ReversedResidualEdgePredicate<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
     {
-        private IDictionary<TEdge,double> residualCapacities;
-        private IDictionary<TEdge,TEdge> reversedEdges;
+        private readonly IDictionary<TEdge,double> residualCapacities;
+        private readonly IDictionary<TEdge,TEdge> reversedEdges;
 
         public ReversedResidualEdgePredicate(
             IDictionary<TEdge, double> residualCapacities,
             IDictionary<TEdge, TEdge> reversedEdges)
         {
-            if (residualCapacities == null)
-                throw new ArgumentNullException("residualCapacities");
-            if (reversedEdges == null)
-                throw new ArgumentNullException("reversedEdges");
+            Contract.Requires(residualCapacities != null);
+            Contract.Requires(reversedEdges != null);
+            
             this.residualCapacities = residualCapacities;
             this.reversedEdges = reversedEdges;
         }
@@ -45,9 +47,7 @@ namespace QuickGraph.Predicates
 
         public bool Test(TEdge e)
         {
-            if (e == null)
-                throw new ArgumentNullException("e");
-
+            Contract.Requires(e != null);
             return 0 < this.residualCapacities[reversedEdges[e]];
         }
     }

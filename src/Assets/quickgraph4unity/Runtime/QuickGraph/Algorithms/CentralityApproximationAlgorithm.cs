@@ -3,10 +3,13 @@ using System.Collections.Generic;
 
 using QuickGraph.Algorithms.ShortestPath;
 using QuickGraph.Algorithms.Observers;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Algorithms
 {
+#if !SILVERLIGHT
     [Serializable]
+#endif
     public sealed class CentralityApproximationAlgorithm<TVertex, TEdge> :
         AlgorithmBase<IVertexListGraph<TVertex,TEdge>>
         where TEdge : IEdge<TVertex>
@@ -19,22 +22,22 @@ namespace QuickGraph.Algorithms
 
         public CentralityApproximationAlgorithm(
             IVertexListGraph<TVertex, TEdge> visitedGraph,
-            IDictionary<TEdge, double> distances
+            Func<TEdge, double> distances
             )
             :base(visitedGraph)
         {
-            if (distances==null)
-                throw new ArgumentNullException("distances");
+            Contract.Requires(distances != null);
+
             this.dijkstra = new DijkstraShortestPathAlgorithm<TVertex, TEdge>(
                 this.VisitedGraph,
                 distances,
-                new ShortestDistanceRelaxer()
+                DistanceRelaxers.ShortestDistance
                 );
             this.predecessorRecorder = new VertexPredecessorRecorderObserver<TVertex, TEdge>();
             this.predecessorRecorder.Attach(this.dijkstra);
         }
 
-        public IDictionary<TEdge, double> Distances
+        public Func<TEdge, double> Distances
         {
             get { return this.dijkstra.Weights; }
         }
@@ -51,8 +54,9 @@ namespace QuickGraph.Algorithms
             set { this.maxIterationCount = value; }
         }
 
-        private void Initialize()
+        protected override void Initialize()
         {
+            base.Initialize();
             this.centralities.Clear();
             foreach (var v in this.VisitedGraph.Vertices)
                 this.centralities.Add(v, 0);
@@ -71,11 +75,15 @@ namespace QuickGraph.Algorithms
                 this.dijkstra.Compute(v);
 
                 foreach (var u in this.VisitedGraph.Vertices)
-                    this.centralities[u] += n * this.dijkstra.Distances[u] / (this.MaxIterationCount * (n - 1));
+                {
+                    double d;
+                    if (this.dijkstra.TryGetDistance(u, out d))
+                        this.centralities[u] += n * d / (this.MaxIterationCount * (n - 1));
+                }
             }
 
             // update
-            foreach (var v in this.VisitedGraph.Vertices)
+            foreach (var v in this.centralities.Keys)
                 this.centralities[v] = 1.0/this.centralities[v];
         }
     }

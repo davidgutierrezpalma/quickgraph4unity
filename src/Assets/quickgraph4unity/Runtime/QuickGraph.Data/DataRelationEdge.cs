@@ -2,16 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Data;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph.Data
 {
-    public sealed class DataRelationEdge : IEdge<DataTable>
+    public sealed class DataRelationEdge 
+        : IEdge<DataTable>
     {
         private readonly DataRelation relation;
         public DataRelationEdge(DataRelation relation)
         {
-            if (relation == null)
-                throw new ArgumentNullException("relation");
+            Contract.Requires(relation != null);
+
             this.relation = relation;
         }
 

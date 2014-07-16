@@ -11,8 +11,10 @@ namespace QuickGraph.Algorithms.Search
     ///     idref="gross98graphtheory"
     ///     chapter="4.2"
     ///     />
+#if !SILVERLIGHT
     [Serializable]
-    public sealed class ImplicitDepthFirstSearchAlgorithm<TVertex,TEdge> :
+#endif
+    public sealed class ImplicitDepthFirstSearchAlgorithm<TVertex, TEdge> :
         RootedAlgorithmBase<TVertex,IIncidenceGraph<TVertex,TEdge>>,
         IVertexPredecessorRecorderAlgorithm<TVertex,TEdge>,
         IVertexTimeStamperAlgorithm<TVertex,TEdge>,
@@ -72,7 +74,7 @@ namespace QuickGraph.Algorithms.Search
         /// <summary>
         /// Invoked on the source vertex once before the start of the search. 
         /// </summary>
-        public event VertexEventHandler<TVertex> StartVertex;
+        public event VertexAction<TVertex> StartVertex;
 
         /// <summary>
         /// Raises the <see cref="StartVertex"/> event.
@@ -81,13 +83,13 @@ namespace QuickGraph.Algorithms.Search
         private void OnStartVertex(TVertex v)
         {
             if (StartVertex != null)
-                StartVertex(this, new VertexEventArgs<TVertex>(v));
+                StartVertex(v);
         }
 
         /// <summary>
         /// Invoked when a vertex is encountered for the first time. 
         /// </summary>
-        public event VertexEventHandler<TVertex> DiscoverVertex;
+        public event VertexAction<TVertex> DiscoverVertex;
 
 
         /// <summary>
@@ -97,13 +99,13 @@ namespace QuickGraph.Algorithms.Search
         private void OnDiscoverVertex(TVertex v)
         {
             if (DiscoverVertex != null)
-                DiscoverVertex(this, new VertexEventArgs<TVertex>(v));
+                DiscoverVertex(v);
         }
 
         /// <summary>
         /// Invoked on every out-edge of each vertex after it is discovered. 
         /// </summary>
-        public event EdgeEventHandler<TVertex,TEdge> ExamineEdge;
+        public event EdgeAction<TVertex,TEdge> ExamineEdge;
 
 
         /// <summary>
@@ -113,7 +115,7 @@ namespace QuickGraph.Algorithms.Search
         private void OnExamineEdge(TEdge e)
         {
             if (ExamineEdge != null)
-                ExamineEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                ExamineEdge(e);
         }
 
         /// <summary>
@@ -121,7 +123,7 @@ namespace QuickGraph.Algorithms.Search
         /// the search tree. If you wish to record predecessors, do so at this 
         /// event point. 
         /// </summary>
-        public event EdgeEventHandler<TVertex, TEdge> TreeEdge;
+        public event EdgeAction<TVertex, TEdge> TreeEdge;
 
 
         /// <summary>
@@ -131,13 +133,13 @@ namespace QuickGraph.Algorithms.Search
         private void OnTreeEdge(TEdge e)
         {
             if (TreeEdge != null)
-                TreeEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                TreeEdge(e);
         }
 
         /// <summary>
         /// Invoked on the back edges in the graph. 
         /// </summary>
-        public event EdgeEventHandler<TVertex, TEdge> BackEdge;
+        public event EdgeAction<TVertex, TEdge> BackEdge;
 
 
         /// <summary>
@@ -147,14 +149,14 @@ namespace QuickGraph.Algorithms.Search
         private void OnBackEdge(TEdge e)
         {
             if (BackEdge != null)
-                BackEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                BackEdge(e);
         }
 
         /// <summary>
         /// Invoked on forward or cross edges in the graph. 
         /// (In an undirected graph this method is never called.) 
         /// </summary>
-        public event EdgeEventHandler<TVertex, TEdge> ForwardOrCrossEdge;
+        public event EdgeAction<TVertex, TEdge> ForwardOrCrossEdge;
 
 
         /// <summary>
@@ -164,7 +166,7 @@ namespace QuickGraph.Algorithms.Search
         private void OnForwardOrCrossEdge(TEdge e)
         {
             if (ForwardOrCrossEdge != null)
-                ForwardOrCrossEdge(this, new EdgeEventArgs<TVertex, TEdge>(e));
+                ForwardOrCrossEdge(e);
         }
 
         /// <summary>
@@ -172,7 +174,7 @@ namespace QuickGraph.Algorithms.Search
         /// the search tree and all of the adjacent vertices have been 
         /// discovered (but before their out-edges have been examined). 
         /// </summary>
-        public event VertexEventHandler<TVertex> FinishVertex;
+        public event VertexAction<TVertex> FinishVertex;
 
         /// <summary>
         /// Raises the <see cref="FinishVertex"/> event.
@@ -181,21 +183,23 @@ namespace QuickGraph.Algorithms.Search
         private void OnFinishVertex(TVertex v)
         {
             if (FinishVertex != null)
-                FinishVertex(this, new VertexEventArgs<TVertex>(v));
+                FinishVertex(v);
         }
 
         protected override void InternalCompute()
         {
             TVertex rootVertex;
             if (!this.TryGetRootVertex(out rootVertex))
-                throw new RootVertexNotSpecifiedException();
+                throw new InvalidOperationException("root vertex not set");
 
             this.Initialize();
             this.Visit(rootVertex, 0);
         }
 
-        private void Initialize()
+        protected override void Initialize()
         {
+            base.Initialize();
+
             this.VertexColors.Clear();
         }
 

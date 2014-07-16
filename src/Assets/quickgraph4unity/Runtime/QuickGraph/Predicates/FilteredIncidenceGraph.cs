@@ -3,10 +3,12 @@ using System.Collections.Generic;
 
 namespace QuickGraph.Predicates
 {
+#if !SILVERLIGHT
     [Serializable]
-    public class FilteredIncidenceGraph<TVertex, TEdge, TGraph> :
-        FilteredImplicitGraph<TVertex,TEdge,TGraph>,
-        IIncidenceGraph<TVertex,TEdge>
+#endif
+    public class FilteredIncidenceGraph<TVertex, TEdge, TGraph> 
+        : FilteredImplicitGraph<TVertex,TEdge,TGraph>
+        , IIncidenceGraph<TVertex,TEdge>
         where TEdge : IEdge<TVertex>
         where TGraph : IIncidenceGraph<TVertex,TEdge>
     {

@@ -1,15 +1,22 @@
 ﻿using System;
+using System.Diagnostics.Contracts;
 
 namespace QuickGraph
 {
+#if !SILVERLIGHT
 	[Serializable]
-    public class TaggedEdge<TVertex,TTag> : Edge<TVertex>
+#endif
+    public class TaggedEdge<TVertex,TTag> 
+        : Edge<TVertex>
+        , ITagged<TTag>
     {
         private TTag tag;
 
         public TaggedEdge(TVertex source, TVertex target, TTag tag)
             :base(source,target)
         {
+            Contract.Ensures(Object.Equals(this.Tag,tag));
+
             this.tag = tag;
         }
 
@@ -17,8 +24,9 @@ namespace QuickGraph
 
         protected virtual void OnTagChanged(EventArgs e)
         {
-            if (this.TagChanged != null)
-                this.TagChanged(this, e);
+            var eh = this.TagChanged;
+            if (eh != null)
+                eh(this, e);
         }
 
         public TTag Tag
